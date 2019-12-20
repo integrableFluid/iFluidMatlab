@@ -12,9 +12,12 @@ The complete iFluifd documentation can be found at
 
 
 ## **References**
+iFluid uses the following functions for utility purposes.
 
 **Gauss-Legendre Quadrature (legzo)**
+
 [https://github.com/Pazus/Legendre-Gauss-Quadrature](https://github.com/Pazus/Legendre-Gauss-Quadrature)
 
 **ConsoleProgressBar**
-Evgeny Pr (2019). ConsoleProgressBar (https://www.mathworks.com/matlabcentral/fileexchange/30297-consoleprogressbar), MATLAB Central File Exchange. 
+
+Evgeny Pr (2019). ConsoleProgressBar [https://www.mathworks.com/matlabcentral/fileexchange/30297-consoleprogressbar](https://www.mathworks.com/matlabcentral/fileexchange/30297-consoleprogressbar), MATLAB Central File Exchange. 
