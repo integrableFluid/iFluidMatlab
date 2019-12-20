@@ -1,5 +1,6 @@
-*.asv
 paper/
+tests/
+*.asv
 *.gif
 *.png
 *.mat

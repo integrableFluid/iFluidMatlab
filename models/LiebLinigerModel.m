@@ -1,7 +1,7 @@
 classdef LiebLinigerModel < iFluidCore
-    % Class specifying model specific quantities.
-    % Solves the Bethe-Boltzmann equation for GHD propagation via the
-    % superclass, which implements the general methods. 
+    % iFluid implmentation of TBA functions for Lieb-Liniger model
+    %
+    % ### Couplings are { mu, c } ###
     %
     % The units used in this parameterization are as follows:
     % m         = 1/2
@@ -24,8 +24,8 @@ methods (Access = public)
         
     % Constructor
     function obj = LiebLinigerModel(x_grid, rapid_grid, rapid_w, couplings, Options)   
-        % Set default parameters
         if nargin < 5
+            % If no options, pass empty struct to superclass constructor
             Options = struct;
         end
         
@@ -107,9 +107,18 @@ methods (Access = public)
     
     
     function mu0_fit = fitAtomnumber(obj, T, V_ext, Natoms, mu0_guess, setCouplingFlag)
-        % Finds mu_0 for a given potential, V_ext, and temperature, T,
-        % corresponding to a given atomnumber.
-        % NOTE: V_ext is anonymous function with argument (t,x).
+        % =================================================================
+        % Purpose : Fits a central chemical potential such that the 
+        %           integrated root density of the thermal state produces 
+        %           the specified number of atoms.
+        % Input :   T       -- Temeprature of system (scalar or @(x))
+        %           V_ext   -- External potential as @(x)
+        %           Natoms  -- Number of atoms
+        %           mu0_guess -- Initial guess for central chemical pot.
+        %           setCouplingFlag -- (optional)if true, set coupling to 
+        %                               fitted mu
+        % Output:   mu0_fit -- Fitted central chemical potential
+        % =================================================================
         
         if nargin < 6
             setCouplingFlag = false;
@@ -144,8 +153,17 @@ methods (Access = public)
 
 
     function [v_eff, a_eff] = calcEffectiveVelocities(obj, theta, t, x, rapid, type)        
-        % Overloads method, as acceleration from mu has much simpler
-        % expression than the general one.
+        % =================================================================
+        % Purpose : Overloads superclass method, as acceleration in LL
+        %           model can be computed in more efficient way.
+        % Input :   theta -- filling function (iFluidTensor)
+        %           t     -- time (scalar)
+        %           x     -- x-coordinate (can be scalar or vector)
+        %           rapid -- rapid-coordinate (can be scalar or vector)
+        %           type  -- quasiparticle type (can be scalar or vector)
+        % Output:   v_eff -- Effective velocity (iFluidTensor)
+        %           a_eff -- Effective acceleration (iFluidTensor)
+        % =================================================================
         de_dr   = obj.applyDressing(obj.calcEnergyRapidDeriv(t, x, rapid, type), theta, t);
         dp_dr   = obj.applyDressing(obj.calcMomentumRapidDeriv(t, x, rapid, type), theta, t);
         
@@ -194,6 +212,13 @@ methods (Access = public)
     
     
     function g_n = calcLocalCorrelator(obj, n, theta, t_array)
+        % =================================================================
+        % Purpose : Calculates local n-body correlation function
+        % Input :   n     -- order of correlation calculated
+        %           theta -- filling function (cell array of iFluidTensor)
+        %           t_array- array of times corresponding to theta
+        % Output:   g_n   -- Correlation func. for each time in t_array
+        % =================================================================
         Nsteps = length(t_array);
         g_n = zeros(obj.M, Nsteps);
         
@@ -231,7 +256,10 @@ methods (Access = public)
             g_n(:,k) = prefac.*squeeze(double(g_temp));
         end
         
-        
+        % Nested recursive function for finding all sets of {m_j}, which 
+        % satisfy the equation:
+        %   sum_{j = 1}^{imfty} j*m_j = n
+        % where m_j are positive integers 
         function m_seq = findMseq(j, m, n, m_seq)
             % Set first value to max possible
             R   = n - m*(1:n)';
@@ -261,6 +289,13 @@ methods (Access = public)
     
         
     function B = calcB(obj, n, theta, t)
+        % =================================================================
+        % Purpose : Supporting function for calcLocalCorrelator()
+        % Input :   n     -- order of correlation calculated
+        %           theta -- filling function (single iFluidTensor)
+        %           t     -- time 
+        % Output:   B     -- cell array of all B_i funcs up to order 2*n-1
+        % =================================================================
         b       = cell( 1 , 2*n - 1 + 2); % added two dummy indices
         b(:)    = {iFluidTensor( obj.N , 1 , 1 , 1 , obj.M )};
         

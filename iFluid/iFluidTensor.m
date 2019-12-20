@@ -1,21 +1,43 @@
 classdef iFluidTensor < handle
+    % Main data structure of iFluid to keep track of the indices. The class
+    % wraps around a 5-dimensional matrix and overlaods all the standard
+    % matrix operations to generalize them to iFluids index structure.
+    %
+    % ======================== Index convention ===========================
+    %   Index 1: main rapidity index
+    %   Index 2: auxiliary rapidity index (used for convolutions)
+    %   Index 3: main type index
+    %   Index 4: auxiliary type index (used for convolutions)
+    %   Index 5: spatial index (leave unused for homogeneous quantities)
+    %
+    % ========================= Initialization ============================
+    %   Via matrix: iFluidTensor( mat )
+    %       - initializes a tensor with mat as underlying matrix
+    %
+    %   Via 0 scalar: iFluidTensor( 0 )
+    %       - initializes a tensor with mat as underlying matrix
+    %
+    %   Via specification of index sizes: iFluidTensor( 4 , 2 , 3 )
+    %       - initializes a size 4x2x3 tensor of zeroes
+    %
     
 properties (Access = private)
     
     % Underlying data structure 
     matrix = [];
     
-    % dimensions
-    d1 = [] % main rapidity index
-    d2 = [] % auxiliary rapidity index
-    d3 = [] % main species index
-    d4 = [] % auxiliary species index
-    d5 = [] % spatial index
+    % Size of indices 
+    d1 = []
+    d2 = [] 
+    d3 = [] 
+    d4 = [] 
+    d5 = [] 
 end
 
 
 methods (Access = public)
-    % Constructor
+    
+    %$ Constructor
     function obj = iFluidTensor(varargin)
         % Determine whether input is a matrix of list of dimensions
         if length(varargin) == 1 && ~isscalar(varargin{1}) % input is matrix
@@ -35,8 +57,9 @@ methods (Access = public)
     end
     
     
+    %% Special iTensorFluid methods
     function C = atSpacePoint(obj, x)
-        % Gets tensor at certain spatial coordinate x
+        % Returns an iFluidTensor of 4 indices at spatial index x
         mat = obj.matrix(:,:,:,:,x);
         C   = iFluidTensor(repmat(mat, 1, 1, 1, 1)); % makes sure all indices are preserved
     end
@@ -71,6 +94,7 @@ methods (Access = public)
     
     
     function C = size(obj, dim)
+        % Returns size of underlying matrix
         if nargin == 1
             C = size(double(obj));
         else
@@ -85,47 +109,10 @@ methods (Access = public)
     end
     
     
-    function C = inv(obj)
-        % Solve Uinv*U = I
-        I_rapid = eye(obj.d1);
-        I_type  = repmat(eye(obj.d3), 1 ,1, 1, obj.d5);
-        I_type  = permute(I_type, [3 4 1 2 5]);
-        identity= iFluidTensor(I_rapid.*I_type);
-        
-        C       = obj\identity;
-    end
-    
-    
-    function C = exp(obj)
-        x = double(obj);
-        x = exp(x);
-        C = iFluidTensor(x);
-    end
-    
-    
-    function C = log(obj)
-        x = double(obj);
-        x = log(x);
-        C = iFluidTensor(x);
-    end
-    
-    
-    function C = abs(obj)
-        x = double(obj);
-        C = iFluidTensor(abs(x));
-    end
-    
-    
-    function C = transpose(obj)
-        % Permutes the two rapidity indices and the two type indices
-        % seperately
-        x = double(obj);
-        x = permute(x,[2 1 4 3 5]);
-        C = iFluidTensor(x);
-    end
     
     
     function obj = setIdentity(obj)
+        % Sets the tensor to identity in both rapidity and type indices
         if obj.d1 ~= obj.d2 && obj.d3 ~= obj.d4
             error('Tensor is not square!')
         end
@@ -140,7 +127,7 @@ methods (Access = public)
     end
     
     
-    %% Matrix operation overloads
+    %% Overloads Matlab operators
     function B = subsref(obj,S)
         B = subsref(obj.matrix, S);
     end
@@ -207,11 +194,16 @@ methods (Access = public)
         % Overloads A*B
         
         if isa(A,'double') || isa(B,'double')
+            % If either A or B is a matrix perform "regular" matrix
+            % multiplixation
             a = double(A);
             b = double(B);
             x = mtimes(a,b);
         else
-            % Assumes both objects are GHD tensors
+            % If both A and B are iFluidTensor contract over 2nd and 4th
+            % index
+            assert( isa( A ,'iFluidTensor' ) );
+            assert( isa( B ,'iFluidTensor' ) );
         
             a   = flatten(A);
             b   = flatten(B);
@@ -270,8 +262,13 @@ methods (Access = public)
     
     
     function C = mldivide(A,B)
-        % Calculates A\B
-        % This function assumes both objects are GHD tensors
+        % Calculates A\B i.e. solves system of linear equations
+
+        assert( isa( A ,'iFluidTensor' ) );
+        assert( isa( B ,'iFluidTensor' ) );
+        
+        % Flattens the tensors to create a system of equations for each
+        % type
         a = flatten(A);
         b = flatten(B);
          
@@ -306,6 +303,50 @@ methods (Access = public)
         C           = iFluidTensor(x);
     end
     
+    
+    %% Overloads Matlab matrix operations 
+    function C = inv(obj)
+        % Solve Uinv*U = I
+        I_rapid = eye(obj.d1);
+        I_type  = repmat(eye(obj.d3), 1 ,1, 1, obj.d5);
+        I_type  = permute(I_type, [3 4 1 2 5]);
+        identity= iFluidTensor(I_rapid.*I_type);
+        
+        C       = obj\identity;
+    end
+    
+    
+    
+    function C = exp(obj)
+        % Takes elementwise exponential
+        x = double(obj);
+        x = exp(x);
+        C = iFluidTensor(x);
+    end
+    
+    
+    function C = log(obj)
+        % Takes elementwise logarithm
+        x = double(obj);
+        x = log(x);
+        C = iFluidTensor(x);
+    end
+    
+    
+    function C = abs(obj)
+        % Takes elementwise absolute value
+        x = double(obj);
+        C = iFluidTensor(abs(x));
+    end
+    
+    
+    function C = transpose(obj)
+        % Permutes the two rapidity indices and the two type indices
+        % pairwise 
+        x = double(obj);
+        x = permute(x,[2 1 4 3 5]);
+        C = iFluidTensor(x);
+    end
     
     
 end

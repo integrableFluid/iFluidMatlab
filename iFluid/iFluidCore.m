@@ -1,33 +1,36 @@
 classdef iFluidCore < handle
-    % Superclass for solving GHD dynamical equations.
-    % Extends handle class --> properties can be changed with setter
-    % methods while retaining GHD object.
+    % Superclass for solving general equations of the thermodynamic Bethe
+    % ansatz.
     % This class contains abstract methods, which are model specific,
-    % whereby they must be implemented in the corresponding subclass.
+    % whereby they must be implemented in subclasses.
     % 
-    % NOTE: This version employs an auto-derivative feature, whereby only
-    % the model parameters (energy, momentum, scattering) along with the
-    % couplings must be specified - their derivatives are automatically
-    % taken. The model parameters, couplings, and associated derivatives
-    % are all stores as anonymous functions in cell-arrays.
-    % 
-    % In case the auto-derivative fails (feature is not very robust), one
-    % must supply coupling-derivatives along with the couplings in a cell
-    % array, while the derivatives of model parameters must be implmented 
-    % as overloaded class functions.
+    % =========== How to extend this class ========
     %
-    % Several options exists for solvers and auto-derivatives. The default
-    % options can be found in the properties of this class. To change
-    % options one must supply the constructor with a struct containing the
-    % options-parameters one wishes to change.
+    % ** Step 1 ** Create new model 
+    %   
+    %   myModel < iFluidCore
     %
-    % This class and any subclass of it must follow the following
-    % convention for indeces:
-    %   Index 1: Main rapidity index, size N.
-    %   Index 2: Secondary rapid index, used for kernels.
-    %   Index 3: Main type index, size Ntypes.
-    %   Index 4: Secondary type index, used for kernels.
-    %   Index 5: Spatial index, size M.
+    %
+    % ** Step 2 ** Implement the abstract properties and methods 
+    %   
+    %   quasiSpecies    % can be either 'fermion', 'boson', 'classical'
+    %
+    %   getBareEnergy(obj, t, x, rapid, type)
+    %   getBareMomentum(obj, t, x, rapid, type)
+    %   calcEnergyRapidDeriv(obj, t, x, rapid, type)
+    %   calcMomentumRapidDeriv(obj, t, x, rapid, type)
+    %   calcScatteringRapidDeriv(obj, t, x, rapid1, rapid2, type1, type2)
+    %   calcEnergyCouplingDeriv(obj, coupIdx, t, x, rapid, type)
+    %   calcMomentumCouplingDeriv(obj, coupIdx, t, x, rapid, type)
+    %   calcScatteringCouplingDeriv(obj, coupIdx, t, x, rapid1, rapid2, type1, type2)
+    %
+    %
+    % ** Step 3 ** Write constructor calling the super-constructor
+    %
+    %   function obj = myModel(x_grid, rapid_grid, rapid_w, couplings, Ntypes, Options)
+    %       obj = obj@iFluidCore(x_grid, rapid_grid, rapid_w, couplings, Ntypes, Options);
+    %   end
+    %
     %
     
 properties (Access = protected)
@@ -49,7 +52,7 @@ properties (Access = protected)
     % Optional parameters (default values specified here). 
     tolerance       = 1e-6;     % Tolerance for TBA solution
     maxcount        = 100;      % Max interations for TBA solution
-    homoEvol        = false;
+    homoEvol        = false;    % Homogeneous evolution
 
 end % end protected properties
 
@@ -173,6 +176,14 @@ methods (Access = public)
     
     
     function h_i = getOneParticleEV(obj, charIdx, t, x, rapid)
+        % =================================================================
+        % Purpose : Returns one-particle eigenvalues of the charIdx'th charge. 
+        % Input :   charIdx -- array of charges to calculate
+        %           t     -- time (scalar)
+        %           x     -- x-coordinate (can be scalar or vector)
+        %           rapid -- rapid-coordinate (can be scalar or vector)
+        % Output:   h_i   -- i'th order eigenvalue
+        % =================================================================
         switch charIdx
         case 0 % eigenvalue of number operator
             h_i = repmat(obj.type_grid, length(rapid), 1);
@@ -181,17 +192,20 @@ methods (Access = public)
         case 2 % eigenvalue of Hamiltonian
             h_i = obj.getBareEnergy(t, x, rapid,  obj.type_grid);
         otherwise 
+            % Higher order charges must be implemented in specific model
             error(['Eigenvalue ' num2str(charIdx) ' not implmented!'])
         end
     end
     
        
     function [rho, rhoS] = transform2rho(obj, theta, t_array)
-        % Transforms from occupation number basis (theta) to
-        % occupied density of states basis (rho).
-        % NOTE: if couplings are time-dependent, t = 0 should be used for
-        % units to stay fixed.
-        
+        % =================================================================
+        % Purpose : Transforms filling function into root density.
+        % Input :   theta   -- filling function (cell array of iFluidTensor)
+        %           t_array -- array of times corresponding to theta
+        % Output:   rho     -- root density (cell array of iFluidTensor)
+        %           rhoS    -- density of states (cell array of iFluidTensor)
+        % =================================================================   
         Nsteps  = length(theta); % number of time steps
         rho     = cell(1,Nsteps);
         rhoS    = cell(1,Nsteps);
@@ -224,11 +238,13 @@ methods (Access = public)
     
     
     function [theta, rhoS] = transform2theta(obj, rho, t_array)
-        % Transforms from occupied density of states basis (rho) to
-        % occupation number basis (theta).
-        % NOTE: if couplings are time-dependent, t = 0 should be used for
-        % units to stay fixed.
-        
+        % =================================================================
+        % Purpose : Transforms root density into filling function.
+        % Input :   rho     -- root density (cell array of iFluidTensor)
+        %           t_array -- array of times corresponding to theta
+        % Output:   theta   -- filling function (cell array of iFluidTensor)
+        %           rhoS    -- density of states (cell array of iFluidTensor)
+        % =================================================================
         Nsteps  = length(rho); % number of time steps
         theta   = cell(1,Nsteps);
         rhoS    = cell(1,Nsteps);
@@ -259,10 +275,16 @@ methods (Access = public)
     end
     
 
-    function [q, j] = calcCharges(obj, theta, c_idx, t_array)
-        % Calculate charges, q_i, and associated currents, j_i, where i is
-        % entry in vector c_idx.
-        
+    function [q, j] = calcCharges(obj, c_idx, theta, t_array)
+        % =================================================================
+        % Purpose : Calculates expectation values of charge densities and
+        %           associated currents.
+        % Input :   c_idx   -- charge indices
+        %           theta   -- filling function (cell array of iFluidTensor)
+        %           t_array -- array of times corresponding to theta
+        % Output:   q       -- charge exp. vals for each t in t_array
+        %           j       -- current exp. vals for each t in t_array
+        % ================================================================= 
         if iscell(theta)
             Nsteps = length(theta); % number of time steps
         else
@@ -301,10 +323,16 @@ methods (Access = public)
     
     
     function [theta, e_eff] = calcThermalState(obj, T, TBA_couplings)
-        % Calculate initial filling function, given by the equilibrium TBA
-        % for some temperature, T, and couplings.
-        % If no couplings are passed to method, use already set couplings.
-        
+        % =================================================================
+        % Purpose : Calculates thermal state for the given couplings and
+        %           temperature.
+        % Input :   T     -- Temperature (scalar or @(x))
+        %           TBA_couplings -- (optional) cell array of couplings. If
+        %                            none are passed, use already set
+        %                            couplings of model.
+        % Output:   theta -- Filling function of thermal state 
+        %           e_eff -- Pesudo-energy of thermal state 
+        % ================================================================= 
         if nargin == 3 % use input TBA_couplings
             % Save old couplings 
             couplings_old   = obj.getCouplings();
@@ -324,7 +352,17 @@ methods (Access = public)
 
 
     function [v_eff, a_eff] = calcEffectiveVelocities(obj, theta, t, x, rapid, type)        
-        % Calculates velocities
+        % =================================================================
+        % Purpose : Calculates effective velocity and acceleration of
+        %           quasiparticles.
+        % Input :   theta -- filling function (iFluidTensor)
+        %           t     -- time (scalar)
+        %           x     -- x-coordinate (can be scalar or vector)
+        %           rapid -- rapid-coordinate (can be scalar or vector)
+        %           type  -- quasiparticle type (can be scalar or vector)
+        % Output:   v_eff -- Effective velocity (iFluidTensor)
+        %           a_eff -- Effective acceleration (iFluidTensor)
+        % =================================================================
         de_dr   = obj.applyDressing(obj.calcEnergyRapidDeriv(t, x, rapid, type), theta, t);
         dp_dr   = obj.applyDressing(obj.calcMomentumRapidDeriv(t, x, rapid, type), theta, t);
         
@@ -343,14 +381,14 @@ methods (Access = public)
             dT      = obj.calcScatteringCouplingDeriv(coupIdx, t, x, rapid, obj.rapid_grid, type, obj.type_grid);
             accKern = 1/(2*pi) * dT.*transpose(obj.rapid_w .* theta);
             
-            % if time deriv of coupling exist compute f
+            % if time deriv of coupling exist, compute f
             if ~isempty(obj.couplings{2,coupIdx}) 
                 f       = -obj.calcMomentumCouplingDeriv(coupIdx, t, x, rapid, type) + accKern*dp_dr;
                 f_dr    = obj.applyDressing(f, theta, t);
                 a_eff   = a_eff + obj.couplings{2,coupIdx}(t,x).*f_dr;
             end
             
-            % if spacial deriv of coupling exist compute Lambda
+            % if spacial deriv of coupling exist, compute Lambda
             if ~isempty(obj.couplings{3,coupIdx}) 
                 L       = -obj.calcEnergyCouplingDeriv(coupIdx, t, x, rapid, type) + accKern*de_dr;
                 L_dr    = obj.applyDressing(L, theta, t);
@@ -363,9 +401,13 @@ methods (Access = public)
     end
     
     function Q_dr = applyDressing(obj, Q, theta, t)
-        % Applies dressing to quantity Q. Q must have first index of
-        % dimension N!
-        
+        % =================================================================
+        % Purpose : Dresses quantity Q by solving system of linear eqs.
+        % Input :   Q     -- Quantity to be dressed
+        %           theta -- filling function (iFluidTensor)
+        %           t     -- time (scalar)
+        % Output:   Q_dr  -- Dressed quantity (iFluidTensor)
+        % =================================================================
         if ~isa(Q, 'iFluidTensor')
             Q = iFluidTensor(Q);
         end
@@ -409,9 +451,15 @@ methods (Access = public)
     
     
     function e_eff = calcEffectiveEnergy(obj, T, t, x, rapid)
-        % Calculates the dressed energy per particle epsilon(k), from which the
-        % preasure and later the filling factor theta can be derived.
-        % This is achieved by iteratively solving the TBA equation.
+        % =================================================================
+        % Purpose : Calculates pseudo-energy of thermal state.
+        % Input :   T     -- Temperature
+        %           t     -- time (scalar)
+        %           x     -- x-coordinate (can be scalar or vector)
+        %           rapid -- rapid-coordinate (can be scalar or vector)
+        %           type  -- quasiparticle type (can be scalar or vector)
+        % Output:   e_eff -- Pesudo-energy of thermal state 
+        % =================================================================
         ebare       = obj.getBareEnergy(t, x, obj.rapid_grid, obj.type_grid); 
         kernel      = 1/(2*pi)*obj.calcScatteringRapidDeriv(t, x, obj.rapid_grid, obj.rapid_grid, obj.type_grid, obj.type_grid );
         

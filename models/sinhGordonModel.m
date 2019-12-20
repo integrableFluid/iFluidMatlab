@@ -1,12 +1,8 @@
 classdef sinhGordonModel < iFluidCore
+    % iFluid implmentation of TBA functions for relativistic sinh-Gordom model
+    %
+    % ### Couplings are { alpha, beta, mu } ###
 
-    % RELATIVISTIC
-        
-    % First coupling is interaction alpha
-    % second coupling is mass parameter mu
-    % third coupling is chemical potential
-    
-    % Link to paper
 properties (Access = protected)
 
     % Species of quasiparticle
@@ -123,7 +119,15 @@ methods (Access = public)
     
     
     function Psi_k_t = calcVertexExpval( obj, kmax, theta_t, t_array)
-        
+        % =================================================================
+        % Purpose : Calculates expectation value of local vertex operator
+        %           for k = 1 to kmax
+        % Input :   kamx    -- max order of expval calculated
+        %           theta_t -- filling function (cell array of iFluidTensor)
+        %           t_array -- array of times corresponding to theta
+        % Output:   Psi_k_t -- Cell array of expectation values for each
+        %                      time sgiven in t_array 
+        % =================================================================
         Psi_k_t = cell(1, length(t_array));
 
         for i = 1:length(t_array)
@@ -150,6 +154,7 @@ end % end public methods
 methods (Access = private)    
 
     function Xi = calcXi(obj, k_idx, t, theta)
+        % Supporting function for calcVertexExpval()
         rapid_arg   = obj.rapid_grid - transpose(obj.rapid_grid);
         chi         = obj.calcChi(k_idx, t, obj.x_grid, rapid_arg);
         
@@ -161,6 +166,7 @@ methods (Access = private)
     
 
     function chi = calcChi(obj, k, t, x, rapid)
+        % Supporting function for calcVertexExpval()
         chi = 1i/(2*pi) * ( exp(-1i*2*k*obj.couplings{1,1}(t,x))./sinh( rapid + 1i*pi*obj.couplings{1,1}(t,x) ) ...
                             - exp(1i*2*k*obj.couplings{1,1}(t,x))./sinh( rapid - 1i*pi*obj.couplings{1,1}(t,x) ) );
     end

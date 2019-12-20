@@ -1,5 +1,29 @@
 classdef iFluidSolver < handle
-
+    % Superclass for solving the main GHD equation by propagating the
+    % filling function, theta. The solving algorithm is abstracted leaving
+    % it to the user to provide one by extending this class.
+    % 
+    % 
+    % =========== How to extend this class ========
+    %
+    % ** Step 1 ** Create new solver 
+    %   
+    %   mySolver < iFluidSolver
+    %
+    %
+    % ** Step 2 ** Implement the abstract methods 
+    %   
+    %   initialize(obj, theta_init, u_init, w_init, t_array )
+    %   step(obj, theta_prev, u_prev, w_prev, t, dt)
+    %
+    %
+    % ** Step 3 ** Write constructor calling the super-constructor
+    %
+    %   function obj = mySolver(coreObj, Options)
+    %       obj = obj@iFluidSolver(coreObj, Options);
+    %   end
+    %
+    %
 properties (Access = protected)
     % Grid lengths
     M               = []; % number of spatial grid-points
@@ -24,6 +48,8 @@ end % end protected properties
 
 methods (Abstract, Access = protected)
     
+    % Abstract methods must be implemented in extending class!
+    
     [theta, u, w] = initialize(obj, theta_init, u_init, w_init, t_array )
     [theta_next, u_next, w_next] = step(obj, theta_prev, u_prev, w_prev, t, dt)
 
@@ -34,7 +60,11 @@ methods (Access = public)
     
     % Superclass constructor
     function obj = iFluidSolver(coreObj, Options)        
+        % iFluidSolver requires an iFluidCore object for calculating
+        % velocities of quasiparticles etc.
+        assert( isa( coreObj, 'iFluidCore' ) )
         
+        % Copy grids from iFluidCore object
         [x_grid, rapid_grid, type_grid, rapid_w] = coreObj.getGrids();
 
         obj.x_grid      = x_grid;
@@ -61,12 +91,21 @@ methods (Access = public)
 
     
     function [theta_t, u_t, w_t] = propagateTheta(obj, theta_init, t_array)
-        % Propagates filling fraction according to GHD equation.
-        % Simultaneously calculates characteristic function, u, used for
-        % correlation functions.
-        
+        % =================================================================
+        % Purpose : Propagates the filling function according to the GHD
+        %           Euler-scale equation.
+        % Input :   theta_init -- Initial filling function (iFluidTensor).
+        %           t_array    -- Time steps for propagation
+        % Output:   theta_t    -- Cell array of filling function,
+        %                         with each entry corresponding to t_array.
+        %           u_t        -- Cell array of position characteristics
+        %                         with each entry corresponding to t_array.
+        %           w_t        -- Cell array of rapidity characteristics
+        %                         with each entry corresponding to t_array.
+        % =================================================================
         Nsteps          = length(t_array) - 1;
         
+        % Initializes cell arrays
         theta_t         = cell(1, Nsteps+1);
         theta_t{1}      = theta_init;
         
@@ -78,7 +117,8 @@ methods (Access = public)
         w_init          = iFluidTensor( repmat( obj.rapid_grid, 1, 1, obj.Ntypes, 1, obj.M) );
         w_t{1}          = w_init;
 
-        % setup for propagation
+        % Initializes the propagation, calculating and internally storing
+        % any additional quantities needed for the step-function.
         [theta, u, w]   = obj.initialize(theta_init, u_init, w_init, t_array);
 
         % initialize progress bar
@@ -111,7 +151,18 @@ methods (Access = protected)
     
     
     function [theta_next, u_next, w_next] = performFirstOrderStep(obj, theta_prev, u_prev, w_prev, t, dt)            
-        % Use single Euler step
+        % =================================================================
+        % Purpose : Performs a single, first-order Euler step propagating
+        %           the filling function theta(t) --> theta(t+dt).
+        % Input :   theta_prev -- Filling function at time t.
+        %           u_prev     -- Position characteristic at time t.
+        %           w_prev     -- Rapidity characteristic at time t.
+        %           t          -- Starting time.
+        %           dt         -- Length of time step.
+        % Output:   theta_next -- Filling function at time t+dt.
+        %           u_next     -- Position characteristic at time t+dt.
+        %           w_next     -- Rapidity characteristic at time t+dt.
+        % =================================================================
         [v_eff, a_eff]  = obj.coreObj.calcEffectiveVelocities(theta_prev, t, obj.x_grid, obj.rapid_grid, obj.type_grid); % should be (1xNxM)
             
         x_back          = obj.x_grid - dt*v_eff;
@@ -126,13 +177,24 @@ methods (Access = protected)
     
     
     function tensor_int = interpPhaseSpace(obj, tensor_grid, rapid_int, x_int, extrapFlag)
-        % This function exists because MATLAB has different syntax between
-        % interp1 and interp2, and I want to choose whether i extrapolate
-        % or not with a simple TRUE/FAlSE argument.
-        % ASSUME function_grid is on x_grid and rapid_grid.
-        % Returns function_int with same dimensions as input function_grid
-        
-        % rapid_int and x_int should be (N,1,Nt,1,M)
+        % =================================================================
+        % Purpose : Interpolates an iFluidTensor defined on the grids 
+        %           stored in the object to new coordinates.
+        %           This function exists because MATLAB has different
+        %           syntax between interp1 and interp2in terms of 
+        %           extrapolation...
+        % Input :   tensor_grid -- iFluidTensor defined on rapid_grid,
+        %                          x_grid, and type_grid.
+        %           rapid_int   -- Rapidity values to interpolate to
+        %                           (should be iFluidTensor sized
+        %                            [N, 1, Ntypes, 1 ,M] )
+        %           x_int       -- Spatial values to interpolate to
+        %                           (should be iFluidTensor sized
+        %                            [N, 1, Ntypes, 1 ,M] )
+        %           extrapFlag  -- if true, enable extrapolations
+        %                          if false, all extrap. values are zero
+        % Output:   tensor_int -- iFluidTensor interpolated to input grids.
+        % =================================================================
         
         % Cast to matrix form
         x_int       = double(x_int);

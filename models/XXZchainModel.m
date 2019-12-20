@@ -1,7 +1,10 @@
 classdef XXZchainModel < iFluidCore
-
-    % First coupling is B
-    % second coupling is theta = acosh(Delta)
+    % iFluid implmentation of TBA functions for XXZ chain model
+    %
+    % ### Couplings are { B, acosh(Delta) } ###
+    %
+    % NOTE: This TBA is only valid for B < 0 and Delta > 1
+    %
 properties (Access = protected)
 
     % Species of quasiparticle
