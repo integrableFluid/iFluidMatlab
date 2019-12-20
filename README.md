@@ -1,1 +1,11 @@
-# iFluidMatlab
+# iFluid
+
+iFluid (or integrable-Fluid) is a Matlab framework for simulating the dynamics of integrable models using the theory of generalized hydrodynamics (GHD). The framework implementes all the basic equations of GHD while abstracting the specific models and numerical solvers. Thus, users can extend the framework to build their own applications.
+
+
+
+# **Documentation**
+
+The complete iFluifd documentation can be found at
+
+***insert link here***
