@@ -9,3 +9,12 @@ iFluid (or integrable-Fluid) is a Matlab framework for simulating the dynamics o
 The complete iFluifd documentation can be found at
 
 ***insert link here***
+
+
+## **References**
+
+**Gauss-Legendre Quadrature (legzo)**
+[https://github.com/Pazus/Legendre-Gauss-Quadrature](https://github.com/Pazus/Legendre-Gauss-Quadrature)
+
+**ConsoleProgressBar**
+Evgeny Pr (2019). ConsoleProgressBar (https://www.mathworks.com/matlabcentral/fileexchange/30297-consoleprogressbar), MATLAB Central File Exchange. 
