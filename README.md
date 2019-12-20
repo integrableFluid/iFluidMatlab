@@ -4,7 +4,7 @@ iFluid (or integrable-Fluid) is a Matlab framework for simulating the dynamics o
 
 
 
-# **Documentation**
+## **Documentation**
 
 The complete iFluifd documentation can be found at
 
