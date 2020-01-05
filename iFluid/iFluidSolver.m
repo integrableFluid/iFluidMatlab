@@ -203,7 +203,7 @@ methods (Access = protected)
         
         % Need spacial dimension as first index in order to use (:) linearization
         x_int       = permute(x_int, [2 1 3]); % (M,N,Nt)
-        rapid_int   = permute(rapid_int, [2 1]);
+        rapid_int   = permute(rapid_int, [2 1 3]);
         
         x_g         = permute(obj.x_grid, [2 1 3]); % (M,N,Nt)
         rapid_g     = permute(obj.rapid_grid, [2 1 3]);

@@ -5,7 +5,10 @@ clear all; close all;
 % "Generalized hydrodynamics with space-time inhomogeneous interactions".
 % (http://arxiv.org/abs/1906.01654)
 
-addpath(['..' filesep 'all' filesep])
+addpath(['..' filesep 'models' filesep])
+addpath(['..' filesep 'solvers' filesep])
+addpath(['..' filesep 'iFluid' filesep])
+addpath(['..' filesep 'utils' filesep])
 
 %% Define simulation parameters
 
@@ -48,12 +51,12 @@ theta_t     = Solver2.propagateTheta(theta_init, t_array);
 
 
 %% Calculate charges
-sz_t        = XXZ.calcCharges(theta_t, 0, t_array);
+sz_t        = XXZ.calcCharges(0, theta_t, t_array);
 
 
 couplings{1,1} = @(t,x) 0;
 XXZ.setCouplings(couplings);
-h_t         = XXZ.calcCharges(theta_t, 2, t_array) ; 
+h_t         = XXZ.calcCharges(2, theta_t, t_array) ; 
 
 
 %% Plot initial state
@@ -61,7 +64,7 @@ h_t         = XXZ.calcCharges(theta_t, 2, t_array) ;
 figure
 for i = 1:Ntypes
     subplot(1,Ntypes,i)
-    imagesc(x_array,k_array,squeeze( theta_init(:,:,i,:,:) ))
+    imagesc(x_array,k_array,theta_init.getType(i,'d') )
     colormap(hot)
 %     caxis([ 0 1])
     set(gca,'YDir','normal') 
@@ -71,7 +74,7 @@ end
 figure
 for i = 1:Ntypes
     subplot(1,Ntypes,i)
-    surf(x_array,k_array,squeeze( theta_init(:,:,i,:,:) ))
+    surf(x_array,k_array,theta_init.getType(i,'d') )
 %     colormap(hot)
 %     caxis([ 0 1])
 %     set(gca,'YDir','normal') 

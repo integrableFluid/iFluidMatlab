@@ -57,7 +57,7 @@ methods (Access = public)
         
         % Calculate contribution from 2 first terms
         I_type  = repmat(eye(obj.Ntypes), 1 ,1, 1, 1, 1);
-        I_type  = permute(I_type, [3 5 1 2 4]);
+        I_type  = permute(I_type, [3 5 1 4 2]);
         
         r_arg   = (rapid1-rapid2);
 
@@ -127,7 +127,7 @@ methods (Access = public)
         
         % Calculate contribution from 2 first terms
         I_type  = repmat(eye(obj.Ntypes), 1 ,1, 1, 1, 1);
-        I_type  = permute(I_type, [3 5 1 2 4]);
+        I_type  = permute(I_type, [3 5 1 4 2]);
         
         r_arg   = (rapid1-rapid2);
 

@@ -302,7 +302,11 @@ methods (Access = public)
         kernel1 = -1/(2*pi)*obj.calcScatteringRapidDeriv(t, obj.x_grid, obj.rapid_grid, obj.rapid_grid, obj.type_grid, obj.type_grid);
         kernel2 = -(obj.rapid_grid - permute(obj.rapid_grid, [4 2 3 1])).*kernel1./obj.couplings{1,2}(t,obj.x_grid);
         
-        X1      = kernel1.setIdentity() - kernel1.*transpose(obj.rapid_w.*theta);
+        I       = iFluidTensor(obj.N, obj.M, obj.Ntypes, obj.N, obj.Ntypes);
+        I.setIdentity();
+
+        
+        X1      = I - kernel1.*transpose(obj.rapid_w.*theta);
         
         for i = 1:(2*n - 1)                
             if mod(i,2) == 0 % i even

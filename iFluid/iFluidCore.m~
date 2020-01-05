@@ -420,7 +420,7 @@ methods (Access = public)
         % Calculate dressing operator
         kernel  = 1/(2*pi)*obj.calcScatteringRapidDeriv(t, obj.x_grid, obj.rapid_grid, obj.rapid_grid, obj.type_grid, obj.type_grid);
         
-        I       = iFluidTensor(obj.N, obj.M, obj.Ntypes, obj.N, obj.Ntypes);
+        I       = iFluidTensor(obj.N, obj.M, obj.Ntypes, obj.N, obj.N);
         I.setIdentity();
         
         U       = I + kernel.*transpose(obj.rapid_w.*theta); 
