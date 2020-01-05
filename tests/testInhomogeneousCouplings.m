@@ -1,4 +1,4 @@
-clear all; close all;
+clear all; %close all;
 
 
 % Reproduces the results found in the paper:
