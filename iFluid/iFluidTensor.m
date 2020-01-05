@@ -24,14 +24,14 @@ classdef iFluidTensor < handle
 properties (Access = private)
     
     % Underlying data structure 
-    matrix = [];
+    matrix  = [];
     
     % Size of indices 
-    d1 = []
-    d2 = [] 
-    d3 = [] 
-    d4 = [] 
-    d5 = [] 
+    dr1     = []
+    dr2     = [] 
+    dt1     = [] 
+    dt2     = [] 
+    dx      = [] 
 end
 
 
@@ -49,49 +49,44 @@ methods (Access = public)
         end
         
         [d1, d2, d3, d4, d5] = size(obj.matrix);
-        obj.d1 = d1;
-        obj.d2 = d2;
-        obj.d3 = d3;
-        obj.d4 = d4;
-        obj.d5 = d5;
+        obj.dr1 = d1;
+        obj.dx  = d2;
+        obj.dt1 = d3;
+        obj.dr2 = d4;
+        obj.dt2 = d5;
     end
     
     
-    %% Special iTensorFluid methods
-    function C = atSpacePoint(obj, x)
-        % Returns an iFluidTensor of 4 indices at spatial index x
-        mat = obj.matrix(:,:,:,:,x);
-        C   = iFluidTensor(repmat(mat, 1, 1, 1, 1)); % makes sure all indices are preserved
+    %% Accessor methods
+    function C = getX(obj, x_idx)
+        % Returns the iFluidTensor at spatial index x_idx
+        mat = obj.matrix(:,x_idx,:,:,:);
+        C   = iFluidTensor(mat); 
     end
     
-    
-    function C = flatten(obj)
-        % Rehapes tensor into 2D- (3D with spacial index) matrix, by
-        % combining indices (rapid1, type1) into a single, first index and 
-        % indices (rapid2, type2) into a single, second index.
-        C = reshape(permute(obj.matrix, [1 3 2 4 5]), obj.d1*obj.d3, obj.d2*obj.d4, obj.d5 );
+    function C = getRapid(obj, rapid_idx)
+        % Returns the iFluidTensor at rapidity index rapid_idx
+        mat = obj.matrix(rapid_idx,:,:,:,:);
+        C   = iFluidTensor(mat); 
     end
     
-    
-    function C = unflatten(obj, A)
-        % Reverse operation of the flatten.
-        C = permute(reshape( A, size(obj.matrix) ), [1 3 2 4 5]);
+    function C = getType(obj, type_idx)
+        % Returns the iFluidTensor at type index type_idx
+        mat = obj.matrix(:,:,type_idx,:,:);
+        C   = iFluidTensor(mat); 
     end
     
-    
-    function C = plt(obj)
-        % Returns a plot-able 3D-matrix
-        % 1st index is rapid
-        % 2nd index is space
-        % 3rd index is type
-        
-        if obj.d2 ~= 1 || obj.d4 ~= 1
-            error( 'plt() only works for tensors with up to 3 indices!' )
-        end
-        
-        C = squeeze(permute(obj.matrix, [1 5 3 2 4]));
+    function C = getAuxRapid(obj, rapid2_idx)
+        % Returns the iFluidTensor at auxillary rapidity index rapid2_idx
+        mat = obj.matrix(:,:,:,rapid2_idx,:);
+        C   = iFluidTensor(mat); 
     end
     
+    function C = getAuxType(obj, type2_idx)
+        % Returns the iFluidTensor at auxillary type index type2_idx
+        mat = obj.matrix(:,:,:,:,type2_idx);
+        C   = iFluidTensor(mat); 
+    end
     
     function C = size(obj, dim)
         % Returns size of underlying matrix
@@ -102,43 +97,47 @@ methods (Access = public)
         end
     end
     
-    
     function C = double(obj)
-        % Cast iFluidTensor to doulbe, i.e. return underlying matrix
+        % Cast iFluidTensor to double, i.e. return underlying matrix
         C = obj.matrix;
     end
     
     
+    %% iTensorFluid index manioulations    
+    
+    function C = flatten(obj)
+        % Rehapes tensor into 2D- (3D with spacial index) matrix, by
+        % combining indices (rapid1, type1) into a single, first index and 
+        % indices (rapid2, type2) into a single, second index.
+        C = reshape(permute(obj.matrix, [1 3 4 5 2]), obj.dr1*obj.dt1, obj.dr2*obj.dt2, obj.dx );
+    end
+    
+    
+    function C = unflatten(obj, A)
+        % Reverse operation of the flatten.
+        C = permute(reshape( A, size(obj.matrix) ), [1 3 4 5 2]);
+    end        
     
     
     function obj = setIdentity(obj)
         % Sets the tensor to identity in both rapidity and type indices
-        if obj.d1 ~= obj.d2 && obj.d3 ~= obj.d4
+        if obj.dr1 ~= obj.dr2 && obj.dt1 ~= obj.dt2
             error('Tensor is not square!')
         end
         
-        I_rapid = eye(obj.d1);
-        I_type  = repmat(eye(obj.d3), 1 ,1, 1, 1);
-        I_type  = permute(I_type, [3 4 1 2]);
+        I_rapid = repmat(eye(obj.dr1), 1, 1, 1, 1, 1);
+        I_type  = repmat(eye(obj.dt1), 1, 1, 1, 1, 1);
+        
+        I_rapid = permute( I_rapid, [1 4 3 2] );
+        I_type  = permute( I_type, [3 5 1 4 2] );
         x       = I_rapid.*I_type;
          
-        x       = repmat(x , 1, 1, 1, 1, obj.d5);
+        x       = repmat(x, 1, obj.dx, 1, 1, 1);
         obj.matrix = x;
     end
     
     
-    %% Overloads Matlab operators
-    function B = subsref(obj,S)
-        B = subsref(obj.matrix, S);
-    end
-    
-    
-    function obj = subsasgn(obj,S,B)
-        newMat = subsasgn(obj.matrix,S,B);
-        obj.matrix = newMat;
-    end
-    
-    
+    %% Standard matrix operator overloads    
     function C = plus(A,B)
         a = double(A);
         b = double(B);
@@ -229,12 +228,12 @@ methods (Access = public)
             end
             
             % Reverse the flatten()
-            size_C      = [ size(A,1), size(B,2), size(A,3), size(B,4), max(size(A,5),size(B,5))];
+            size_C      = [ size(A,1), size(B,4), size(A,3), size(B,5), max(size(A,2),size(B,2))];
             size_C([2 3])= size_C([3 2]); % make sure to permute indices, to reverse flatten
 
             % First split the type and rapidity indices by reshaping, then
             % permute to right positions
-            x           = permute(reshape( x, size_C ), [1 3 2 4 5]);
+            x           = permute(reshape( x, size_C ), [1 5 2 3 4]);
         end
         
         C = iFluidTensor(x);
@@ -293,12 +292,12 @@ methods (Access = public)
         end
         
         % Reverse the flatten()
-        size_C      = [ size(A,2), size(B,2), size(A,4), size(B,4), max(size(A,5),size(B,5))];
+        size_C      = [ size(A,4), size(B,4), size(A,5), size(B,5), max(size(A,2),size(B,2))];
         size_C([2 3])= size_C([3 2]); % make sure to permute indices, to reverse flatten
             
         % First split the type and rapidity indices by reshaping, then
         % permute to right positions
-        x           = permute(reshape( x, size_C ), [1 3 2 4 5]);
+        x           = permute(reshape( x, size_C ), [1 5 2 3 4]);
                     
         C           = iFluidTensor(x);
     end
@@ -307,14 +306,10 @@ methods (Access = public)
     %% Overloads Matlab matrix operations 
     function C = inv(obj)
         % Solve Uinv*U = I
-        I_rapid = eye(obj.d1);
-        I_type  = repmat(eye(obj.d3), 1 ,1, 1, obj.d5);
-        I_type  = permute(I_type, [3 4 1 2 5]);
-        identity= iFluidTensor(I_rapid.*I_type);
+        I = iFluidTensor(obj.dr1, obj.dx, obj.dt1, obj.dr1, obj.dt1).setIdentity();
         
-        C       = obj\identity;
+        C = obj\I;
     end
-    
     
     
     function C = exp(obj)
@@ -342,9 +337,16 @@ methods (Access = public)
     
     function C = transpose(obj)
         % Permutes the two rapidity indices and the two type indices
-        % pairwise 
         x = double(obj);
-        x = permute(x,[2 1 4 3 5]);
+        x = permute(x, [4 2 5 1 3] );
+        C = iFluidTensor(x);
+    end
+    
+    
+    function C = t(obj)
+        % Permutes the two rapidity indices and the two type indices
+        x = double(obj);
+        x = permute(x, [4 2 5 1 3] );
         C = iFluidTensor(x);
     end
     
