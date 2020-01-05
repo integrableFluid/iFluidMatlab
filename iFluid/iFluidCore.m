@@ -97,7 +97,7 @@ methods (Access = public)
         obj.Ntypes      = Ntypes;
         
         % Reshape grids to right format
-        obj.x_grid      = reshape(x_grid, 1, 1, 1, 1, obj.M); % 5th index is space
+        obj.x_grid      = reshape(x_grid, 1, obj.M); % 2nd index is space
         obj.rapid_grid  = reshape(rapid_grid, obj.N, 1); % 1st index is rapidity
         obj.type_grid   = reshape( 1:Ntypes, 1, 1, Ntypes ); % Types are 3rd index
         obj.rapid_w     = reshape( rapid_w , length(rapid_w), 1); % 1st index is rapidity
@@ -419,13 +419,9 @@ methods (Access = public)
         
         % Calculate dressing operator
         kernel  = 1/(2*pi)*obj.calcScatteringRapidDeriv(t, obj.x_grid, obj.rapid_grid, obj.rapid_grid, obj.type_grid, obj.type_grid);
+        I       = kernel.setIdentity();
         
-        I_rapid = eye(obj.N);
-        I_type  = repmat(eye(obj.Ntypes), 1 ,1, 1, 1);
-        I_type  = permute(I_type, [3 4 1 2]);
-        identity= I_rapid.*I_type;
-
-        U       = identity + kernel.*transpose(obj.rapid_w.*theta); 
+        U       = I + kernel.*transpose(obj.rapid_w.*theta); 
         
         % We now have the equation Q = U*Q_dr. Therefore we solve for Q_dr
         % using the '\' operation.
@@ -467,8 +463,8 @@ methods (Access = public)
             T = T(x);
         end
         
-        e_eff       = iFluidTensor(obj.N, 1, obj.Ntypes, 1, obj.M);
-        e_eff_old   = iFluidTensor(obj.N, 1, obj.Ntypes, 1, obj.M);
+        e_eff       = iFluidTensor(obj.N, obj.M, obj.Ntypes);
+        e_eff_old   = iFluidTensor(obj.N, obj.M, obj.Ntypes);
         error_rel   = 1;
         count       = 0;
         

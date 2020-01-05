@@ -56,9 +56,9 @@ methods (Access = public)
     function dT = calcScatteringRapidDeriv(obj, t, x, rapid1, rapid2, type1, type2)
         % Reshape input to ensure right dimensions
         rapid1  = reshape(rapid1, length(rapid1), 1); % rapid1 is 1st index
-        rapid2  = reshape(rapid2, 1, length(rapid2)); % rapid2 is 2nd index
+        rapid2  = reshape(rapid2, 1, 1, 1, length(rapid2)); % rapid2 is 2nd index
         type1   = reshape(type1, 1, 1, length(type1)); % type1 is 3rd index
-        type2   = reshape(type2, 1, 1, 1, length(type2)); % type2 is 4th index
+        type2   = reshape(type2, 1, 1, 1, 1, length(type2)); % type2 is 4th index
         
         dT = -(2.*sin((obj.couplings{1,1}(t,x).*pi)).*cosh((rapid1-rapid2)))./(sinh((rapid1-rapid2)).^2+sin(obj.couplings{1,1}(t,x).*pi).^2);
         
@@ -98,9 +98,9 @@ methods (Access = public)
     function dT = calcScatteringCouplingDeriv(obj, coupIdx, t, x, rapid1, rapid2, type1, type2)        
         % Reshape input to right dimensions
         rapid1  = reshape(rapid1, length(rapid1), 1); % rapid1 is 1st index
-        rapid2  = reshape(rapid2, 1, length(rapid2)); % rapid2 is 2nd index
+        rapid2  = reshape(rapid2, 1, 1, 1, length(rapid2)); % rapid2 is 2nd index
         type1   = reshape(type1, 1, 1, length(type1)); % type1 is 3rd index
-        type2   = reshape(type2, 1, 1, 1, length(type2)); % type2 is 4th index
+        type2   = reshape(type2, 1, 1, 1, 1, length(type2)); % type2 is 4th index
         
         if coupIdx == 1
             % Derivative w.r.t. alpha
@@ -155,10 +155,10 @@ methods (Access = private)
 
     function Xi = calcXi(obj, k_idx, t, theta)
         % Supporting function for calcVertexExpval()
-        rapid_arg   = obj.rapid_grid - transpose(obj.rapid_grid);
+        rapid_arg   = obj.rapid_grid - permute(obj.rapid_grid, [4 2 3 1]);
         chi         = obj.calcChi(k_idx, t, obj.x_grid, rapid_arg);
         
-        X           = eye(obj.N) - chi.*transpose(obj.rapid_w.*theta); 
+        X           = permute(eye(obj.N), [1 3 4 2]) - chi.*transpose(obj.rapid_w.*theta); 
         epsi        = iFluidTensor(exp(-obj.rapid_grid));
 
         Xi          = X\epsi;   

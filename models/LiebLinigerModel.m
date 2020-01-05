@@ -62,9 +62,9 @@ methods (Access = public)
     function dT = calcScatteringRapidDeriv(obj, t, x, rapid1, rapid2, type1, type2)
         % Reshape input to ensure right dimensions
         rapid1  = reshape(rapid1, length(rapid1), 1); % rapid1 is 1st index
-        rapid2  = reshape(rapid2, 1, length(rapid2)); % rapid2 is 2nd index
+        rapid2  = reshape(rapid2, 1, 1, 1, length(rapid2)); % rapid2 is 2nd index
         type1   = reshape(type1, 1, 1, length(type1)); % type1 is 3rd index
-        type2   = reshape(type2, 1, 1, 1, length(type2)); % type2 is 4th index
+        type2   = reshape(type2, 1, 1, 1, 1, length(type2)); % type2 is 4th index
         
         dT      = -2*obj.couplings{1,2}(t,x)./( (rapid1-rapid2).^2 + obj.couplings{1,2}(t,x).^2 );
         
@@ -91,9 +91,9 @@ methods (Access = public)
     function dT = calcScatteringCouplingDeriv(obj, coupIdx, t, x, rapid1, rapid2, type1, type2)
         % Reshape input to ensure right dimensions
         rapid1  = reshape(rapid1, length(rapid1), 1); % rapid1 is 1st index
-        rapid2  = reshape(rapid2, 1, length(rapid2)); % rapid2 is 2nd index
+        rapid2  = reshape(rapid2, 1, 1, 1, length(rapid2)); % rapid2 is 2nd index
         type1   = reshape(type1, 1, 1, length(type1)); % type1 is 3rd index
-        type2   = reshape(type2, 1, 1, 1, length(type2)); % type2 is 4th index
+        type2   = reshape(type2, 1, 1, 1, 1, length(type2)); % type2 is 4th index
         
         if coupIdx == 2
             dT = 2*(rapid1-rapid2)./( (rapid1-rapid2).^2 + + obj.couplings{1,2}(t,x).^2 );
@@ -147,7 +147,7 @@ methods (Access = public)
             couplings_fit{1,1}= @(t,x) mu0 - V_ext(t,x);
             theta           = obj.calcThermalState(T, couplings_fit);
             density         = obj.calcCharges(theta, 0, 0);
-            Natoms_fit      = trapz(permute(obj.x_grid, [5 2 3 4 1]), density);
+            Natoms_fit      = trapz(x_grid, density);
         end % end nested function
     end
 
@@ -297,12 +297,12 @@ methods (Access = public)
         % Output:   B     -- cell array of all B_i funcs up to order 2*n-1
         % =================================================================
         b       = cell( 1 , 2*n - 1 + 2); % added two dummy indices
-        b(:)    = {iFluidTensor( obj.N , 1 , 1 , 1 , obj.M )};
+        b(:)    = {iFluidTensor( obj.N , obj.M)};
         
         kernel1 = -1/(2*pi)*obj.calcScatteringRapidDeriv(t, obj.x_grid, obj.rapid_grid, obj.rapid_grid, obj.type_grid, obj.type_grid);
-        kernel2 = -(obj.rapid_grid - transpose(obj.rapid_grid)).*kernel1./obj.couplings{1,2}(t,obj.x_grid);
+        kernel2 = -(obj.rapid_grid - permute(obj.rapid_grid, [4 2 3 1])).*kernel1./obj.couplings{1,2}(t,obj.x_grid);
         
-        X1      = eye(obj.N) - kernel1.*transpose(obj.rapid_w.*theta);
+        X1      = kernel1.setIdentity() - kernel1.*transpose(obj.rapid_w.*theta);
         
         for i = 1:(2*n - 1)                
             if mod(i,2) == 0 % i even

@@ -5,10 +5,10 @@ classdef iFluidTensor < handle
     %
     % ======================== Index convention ===========================
     %   Index 1: main rapidity index
-    %   Index 2: auxiliary rapidity index (used for convolutions)
+    %   Index 2: spatial index (leave unused for homogeneous quantities)
     %   Index 3: main type index
-    %   Index 4: auxiliary type index (used for convolutions)
-    %   Index 5: spatial index (leave unused for homogeneous quantities)
+    %   Index 4: auxiliary rapidity index (used for convolutions)
+    %   Index 5: auxiliary type index (used for convolutions)
     %
     % ========================= Initialization ============================
     %   Via matrix: iFluidTensor( mat )
@@ -58,34 +58,94 @@ methods (Access = public)
     
     
     %% Accessor methods
-    function C = getX(obj, x_idx)
+    function C = getX(obj, x_idx, t_str)
         % Returns the iFluidTensor at spatial index x_idx
         mat = obj.matrix(:,x_idx,:,:,:);
-        C   = iFluidTensor(mat); 
+        
+        % Decide if output is double or iFluidTensor
+        if nargin == 3
+            if strcmp(t_str, 'd') || strcmp(t_str, 'double')
+                C   = mat;
+            elseif strcmp(t_str, 't') || strcmp(t_str, 'tensor')
+                C   = iFluidTensor(mat);
+            else
+                error('Output type not recognized!')
+            end
+        else
+            C   = iFluidTensor(mat); 
+        end
     end
     
-    function C = getRapid(obj, rapid_idx)
+    function C = getRapid(obj, rapid_idx, t_str)
         % Returns the iFluidTensor at rapidity index rapid_idx
         mat = obj.matrix(rapid_idx,:,:,:,:);
-        C   = iFluidTensor(mat); 
+    
+        % Decide if output is double or iFluidTensor
+        if nargin == 3
+            if strcmp(t_str, 'd') || strcmp(t_str, 'double')
+                C   = mat;
+            elseif strcmp(t_str, 't') || strcmp(t_str, 'tensor')
+                C   = iFluidTensor(mat);
+            else
+                error('Output type not recognized!')
+            end
+        else
+            C   = iFluidTensor(mat); 
+        end
     end
     
-    function C = getType(obj, type_idx)
+    function C = getType(obj, type_idx, t_str)
         % Returns the iFluidTensor at type index type_idx
         mat = obj.matrix(:,:,type_idx,:,:);
-        C   = iFluidTensor(mat); 
+    
+        % Decide if output is double or iFluidTensor
+        if nargin == 3
+            if strcmp(t_str, 'd') || strcmp(t_str, 'double')
+                C   = mat;
+            elseif strcmp(t_str, 't') || strcmp(t_str, 'tensor')
+                C   = iFluidTensor(mat);
+            else
+                error('Output type not recognized!')
+            end
+        else
+            C   = iFluidTensor(mat); 
+        end
     end
     
-    function C = getAuxRapid(obj, rapid2_idx)
+    function C = getAuxRapid(obj, rapid2_idx, t_str)
         % Returns the iFluidTensor at auxillary rapidity index rapid2_idx
         mat = obj.matrix(:,:,:,rapid2_idx,:);
-        C   = iFluidTensor(mat); 
+    
+        % Decide if output is double or iFluidTensor
+        if nargin == 3
+            if strcmp(t_str, 'd') || strcmp(t_str, 'double')
+                C   = mat;
+            elseif strcmp(t_str, 't') || strcmp(t_str, 'tensor')
+                C   = iFluidTensor(mat);
+            else
+                error('Output type not recognized!')
+            end
+        else
+            C   = iFluidTensor(mat); 
+        end
     end
     
-    function C = getAuxType(obj, type2_idx)
+    function C = getAuxType(obj, type2_idx, t_str)
         % Returns the iFluidTensor at auxillary type index type2_idx
         mat = obj.matrix(:,:,:,:,type2_idx);
-        C   = iFluidTensor(mat); 
+    
+        % Decide if output is double or iFluidTensor
+        if nargin == 3
+            if strcmp(t_str, 'd') || strcmp(t_str, 'double')
+                C   = mat;
+            elseif strcmp(t_str, 't') || strcmp(t_str, 'tensor')
+                C   = iFluidTensor(mat);
+            else
+                error('Output type not recognized!')
+            end
+        else
+            C   = iFluidTensor(mat); 
+        end
     end
     
     function C = size(obj, dim)
