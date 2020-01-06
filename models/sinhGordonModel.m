@@ -41,25 +41,19 @@ methods (Access = public)
     end
     
     
-    function de = calcEnergyRapidDeriv(obj, t, x, rapid, type)
+    function de = getEnergyRapidDeriv(obj, t, x, rapid, type)
         m = sqrt( obj.couplings{1,2}(t,x).^2 .* sin(pi*obj.couplings{1,1}(t,x))./(pi*obj.couplings{1,1}(t,x)) );
         de = m.*sinh(rapid);
     end
 
     
-    function dp = calcMomentumRapidDeriv(obj, t, x, rapid, type)
+    function dp = getMomentumRapidDeriv(obj, t, x, rapid, type)
         m = sqrt( obj.couplings{1,2}(t,x).^2 .* sin(pi*obj.couplings{1,1}(t,x))./(pi*obj.couplings{1,1}(t,x)) );
         dp = m.*cosh(rapid);
     end
     
     
-    function dT = calcScatteringRapidDeriv(obj, t, x, rapid1, rapid2, type1, type2)
-        % Reshape input to ensure right dimensions
-        rapid1  = reshape(rapid1, length(rapid1), 1); % rapid1 is 1st index
-        rapid2  = reshape(rapid2, 1, 1, 1, length(rapid2)); % rapid2 is 2nd index
-        type1   = reshape(type1, 1, 1, length(type1)); % type1 is 3rd index
-        type2   = reshape(type2, 1, 1, 1, 1, length(type2)); % type2 is 4th index
-        
+    function dT = getScatteringRapidDeriv(obj, t, x, rapid1, rapid2, type1, type2)
         dT = -(2.*sin((obj.couplings{1,1}(t,x).*pi)).*cosh((rapid1-rapid2)))./(sinh((rapid1-rapid2)).^2+sin(obj.couplings{1,1}(t,x).*pi).^2);
         
         dT(isnan(dT)) = 0; % removes any NaN
@@ -67,7 +61,7 @@ methods (Access = public)
     end
     
     
-    function de = calcEnergyCouplingDeriv(obj, coupIdx, t, x, rapid, type)
+    function de = getEnergyCouplingDeriv(obj, coupIdx, t, x, rapid, type)
         if coupIdx == 1
             % Derivative w.r.t. alpha
             de = ((pi*obj.couplings{1,1}(t,x).*cot(pi*obj.couplings{1,1}(t,x)) - 1).*sqrt((obj.couplings{1,2}(t,x).^2 .* sin(pi*obj.couplings{1,1}(t,x)))./obj.couplings{1,1}(t,x)))./(2*sqrt(pi)*obj.couplings{1,1}(t,x)).*cosh(rapid);
@@ -81,7 +75,7 @@ methods (Access = public)
     end
 
     
-    function dp = calcMomentumCouplingDeriv(obj, coupIdx, t, x, rapid, type)
+    function dp = getMomentumCouplingDeriv(obj, coupIdx, t, x, rapid, type)
         if coupIdx == 1
             % Derivative w.r.t. alpha
             dp = ((pi*obj.couplings{1,1}(t,x).*cot(pi*obj.couplings{1,1}(t,x)) - 1).*sqrt((obj.couplings{1,2}(t,x).^2 .* sin(pi*obj.couplings{1,1}(t,x)))./obj.couplings{1,1}(t,x)))./(2*sqrt(pi)*obj.couplings{1,1}(t,x)).*sinh(rapid);
@@ -95,13 +89,7 @@ methods (Access = public)
     end
     
     
-    function dT = calcScatteringCouplingDeriv(obj, coupIdx, t, x, rapid1, rapid2, type1, type2)        
-        % Reshape input to right dimensions
-        rapid1  = reshape(rapid1, length(rapid1), 1); % rapid1 is 1st index
-        rapid2  = reshape(rapid2, 1, 1, 1, length(rapid2)); % rapid2 is 2nd index
-        type1   = reshape(type1, 1, 1, length(type1)); % type1 is 3rd index
-        type2   = reshape(type2, 1, 1, 1, 1, length(type2)); % type2 is 4th index
-        
+    function dT = getScatteringCouplingDeriv(obj, coupIdx, t, x, rapid1, rapid2, type1, type2)                
         if coupIdx == 1
             % Derivative w.r.t. alpha
             dT = (pi.*cos(((obj.couplings{1,1}(t,x)).*pi)).*sinh((rapid1-rapid2)))./(cosh((rapid1-rapid2)).^2-cos(((obj.couplings{1,1}(t,x)).*pi)).^2);

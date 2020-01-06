@@ -17,12 +17,12 @@ classdef iFluidCore < handle
     %
     %   getBareEnergy(obj, t, x, rapid, type)
     %   getBareMomentum(obj, t, x, rapid, type)
-    %   calcEnergyRapidDeriv(obj, t, x, rapid, type)
-    %   calcMomentumRapidDeriv(obj, t, x, rapid, type)
-    %   calcScatteringRapidDeriv(obj, t, x, rapid1, rapid2, type1, type2)
-    %   calcEnergyCouplingDeriv(obj, coupIdx, t, x, rapid, type)
-    %   calcMomentumCouplingDeriv(obj, coupIdx, t, x, rapid, type)
-    %   calcScatteringCouplingDeriv(obj, coupIdx, t, x, rapid1, rapid2, type1, type2)
+    %   getEnergyRapidDeriv(obj, t, x, rapid, type)
+    %   getMomentumRapidDeriv(obj, t, x, rapid, type)
+    %   getScatteringRapidDeriv(obj, t, x, rapid1, rapid2, type1, type2)
+    %   getEnergyCouplingDeriv(obj, coupIdx, t, x, rapid, type)
+    %   getMomentumCouplingDeriv(obj, coupIdx, t, x, rapid, type)
+    %   getScatteringCouplingDeriv(obj, coupIdx, t, x, rapid1, rapid2, type1, type2)
     %
     %
     % ** Step 3 ** Write constructor calling the super-constructor
@@ -45,6 +45,9 @@ properties (Access = protected)
     type_grid       = [];
     rapid_w         = []; % weights for Gaussian quadrature
     
+    rapid_aux       = []; % auxillary grids
+    type_aux        = [];
+
     
     % Cell array with anonymous functions
     couplings       = []; % @(t,x) coupling #i
@@ -69,12 +72,12 @@ methods (Abstract, Access = public)
     % These methods must be implemented in the extended class
     ebare   = getBareEnergy(obj, t, x, rapid, type)
     pbare   = getBareMomentum(obj, t, x, rapid, type)
-    de      = calcEnergyRapidDeriv(obj, t, x, rapid, type)
-    dp      = calcMomentumRapidDeriv(obj, t, x, rapid, type)
-    dT      = calcScatteringRapidDeriv(obj, t, x, rapid1, rapid2, type1, type2)
-    de      = calcEnergyCouplingDeriv(obj, coupIdx, t, x, rapid, type)
-    dp      = calcMomentumCouplingDeriv(obj, coupIdx, t, x, rapid, type)
-    dT      = calcScatteringCouplingDeriv(obj, coupIdx, t, x, rapid1, rapid2, type1, type2)
+    de      = getEnergyRapidDeriv(obj, t, x, rapid, type)
+    dp      = getMomentumRapidDeriv(obj, t, x, rapid, type)
+    dT      = getScatteringRapidDeriv(obj, t, x, rapid1, rapid2, type1, type2)
+    de      = getEnergyCouplingDeriv(obj, coupIdx, t, x, rapid, type)
+    dp      = getMomentumCouplingDeriv(obj, coupIdx, t, x, rapid, type)
+    dT      = getScatteringCouplingDeriv(obj, coupIdx, t, x, rapid1, rapid2, type1, type2)
     
     
 end % end protected abstract methods
@@ -101,6 +104,10 @@ methods (Access = public)
         obj.rapid_grid  = reshape(rapid_grid, obj.N, 1); % 1st index is rapidity
         obj.type_grid   = reshape( 1:Ntypes, 1, 1, Ntypes ); % Types are 3rd index
         obj.rapid_w     = reshape( rapid_w , length(rapid_w), 1); % 1st index is rapidity
+        
+        obj.rapid_aux   = permute(obj.rapid_grid, [4 2 3 1]);
+        obj.type_aux    = permute(obj.type_grid, [1 2 5 4 3]);
+
         
         % Copy fields of Options struct into class properties
         if nargin > 4
@@ -223,7 +230,7 @@ methods (Access = public)
                 t = t_array(n);
             end
 
-            dp      = obj.calcMomentumRapidDeriv(t, obj.x_grid, obj.rapid_grid, obj.type_grid);
+            dp      = obj.getMomentumRapidDeriv(t, obj.x_grid, obj.rapid_grid, obj.type_grid);
             dp_dr   = obj.applyDressing(dp, theta_n, t);
             
             rhoS{n} = 1/(2*pi) * dp_dr;
@@ -261,8 +268,8 @@ methods (Access = public)
                 t = t_array(n);
             end
 
-            dp      = obj.calcMomentumRapidDeriv(t, obj.x_grid, obj.rapid_grid, obj.type_grid);
-            kernel  = 1/(2*pi) * obj.calcScatteringRapidDeriv(t, obj.x_grid, obj.rapid_grid, obj.rapid_grid, obj.type_grid, obj.type_grid); 
+            dp      = obj.getMomentumRapidDeriv(t, obj.x_grid, obj.rapid_grid, obj.type_grid);
+            kernel  = 1/(2*pi) * obj.calcScatteringRapidDeriv(t, obj.x_grid, obj.rapid_grid, obj.rapid_aux, obj.type_grid, obj.type_aux); 
             
             rhoS{n} = dp/(2*pi) - kernel*(obj.rapid_w.*rho_n);
             theta{n}= rho_n./rhoS{n};
@@ -308,8 +315,8 @@ methods (Access = public)
                 t = t_array(i);
             end
             
-            dp      = obj.calcMomentumRapidDeriv(t, obj.x_grid, obj.rapid_grid, obj.type_grid);
-            dE      = obj.calcEnergyRapidDeriv(t, obj.x_grid, obj.rapid_grid, obj.type_grid);
+            dp      = obj.getMomentumRapidDeriv(t, obj.x_grid, obj.rapid_grid, obj.type_grid);
+            dE      = obj.getEnergyRapidDeriv(t, obj.x_grid, obj.rapid_grid, obj.type_grid);
 
             for n = 1:Ncharg
                 hn          = obj.getOneParticleEV( c_idx(n), t, obj.x_grid, obj.rapid_grid);               
@@ -363,8 +370,8 @@ methods (Access = public)
         % Output:   v_eff -- Effective velocity (iFluidTensor)
         %           a_eff -- Effective acceleration (iFluidTensor)
         % =================================================================
-        de_dr   = obj.applyDressing(obj.calcEnergyRapidDeriv(t, x, rapid, type), theta, t);
-        dp_dr   = obj.applyDressing(obj.calcMomentumRapidDeriv(t, x, rapid, type), theta, t);
+        de_dr   = obj.applyDressing(obj.getEnergyRapidDeriv(t, x, rapid, type), theta, t);
+        dp_dr   = obj.applyDressing(obj.getMomentumRapidDeriv(t, x, rapid, type), theta, t);
         
         v_eff   = de_dr./dp_dr;
          
@@ -378,19 +385,19 @@ methods (Access = public)
         
         % Calculate contribution for each coupling
         for coupIdx = 1:size(obj.couplings,2)            
-            dT      = obj.calcScatteringCouplingDeriv(coupIdx, t, x, rapid, obj.rapid_grid, type, obj.type_grid);
+            dT      = obj.getScatteringCouplingDeriv(coupIdx, t, x, rapid, obj.rapid_aux, type, obj.type_aux);
             accKern = 1/(2*pi) * dT.*transpose(obj.rapid_w .* theta);
             
             % if time deriv of coupling exist, compute f
             if ~isempty(obj.couplings{2,coupIdx}) 
-                f       = -obj.calcMomentumCouplingDeriv(coupIdx, t, x, rapid, type) + accKern*dp_dr;
+                f       = -obj.getMomentumCouplingDeriv(coupIdx, t, x, rapid, type) + accKern*dp_dr;
                 f_dr    = obj.applyDressing(f, theta, t);
                 a_eff   = a_eff + obj.couplings{2,coupIdx}(t,x).*f_dr;
             end
             
             % if spacial deriv of coupling exist, compute Lambda
             if ~isempty(obj.couplings{3,coupIdx}) 
-                L       = -obj.calcEnergyCouplingDeriv(coupIdx, t, x, rapid, type) + accKern*de_dr;
+                L       = -obj.getEnergyCouplingDeriv(coupIdx, t, x, rapid, type) + accKern*de_dr;
                 L_dr    = obj.applyDressing(L, theta, t);
                 a_eff   = a_eff + obj.couplings{3,coupIdx}(t,x).*L_dr;
             end
@@ -418,7 +425,7 @@ methods (Access = public)
         end
         
         % Calculate dressing operator
-        kernel  = 1/(2*pi)*obj.calcScatteringRapidDeriv(t, obj.x_grid, obj.rapid_grid, obj.rapid_grid, obj.type_grid, obj.type_grid);
+        kernel  = 1/(2*pi)*obj.getScatteringRapidDeriv(t, obj.x_grid, obj.rapid_grid, obj.rapid_aux, obj.type_grid, obj.type_aux);
         
         I       = iFluidTensor(obj.N, obj.M, obj.Ntypes, obj.N, obj.Ntypes);
         I.setIdentity();
@@ -459,7 +466,7 @@ methods (Access = public)
         % Output:   e_eff -- Pesudo-energy of thermal state 
         % =================================================================
         ebare       = obj.getBareEnergy(t, x, obj.rapid_grid, obj.type_grid); 
-        kernel      = 1/(2*pi)*obj.calcScatteringRapidDeriv(t, x, obj.rapid_grid, obj.rapid_grid, obj.type_grid, obj.type_grid );
+        kernel      = 1/(2*pi)*obj.getScatteringRapidDeriv(t, x, obj.rapid_grid, obj.rapid_aux, obj.type_grid, obj.type_aux );
         
         if isa(T, 'function_handle')
             T = T(x);
