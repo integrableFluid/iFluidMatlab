@@ -4,3 +4,4 @@ tests/
 *.gif
 *.png
 *.mat
+*.m~
