@@ -16,12 +16,12 @@ N           = 2^7;
 M           = 2^7;
 dt          = 0.025;
 
-kmax        = 13;
+rmax        = 13;
 xmax        = 6;
 tmax        = 8;
 
-k_array     = linspace(-kmax, kmax, N);
-kw          = k_array(2) - k_array(1);
+rap_array   = linspace(-rmax, rmax, N);
+rap_w       = rap_array(2) - rap_array(1);
 x_array     = linspace(-xmax, xmax, M);
 t_array     = linspace(0, tmax, tmax/dt+1);
 
@@ -42,7 +42,7 @@ T           = 3;
 %% Initialize state and solve dynamics
 
 
-LLS        = LiebLinigerModel(x_array, k_array, kw, couplings);
+LLS        = LiebLinigerModel(x_array, rap_array, rap_w, couplings);
 Solver2    = SecondOrderSolver(LLS, []);
 
 
@@ -57,7 +57,7 @@ n_t        = LLS.calcCharges(0, theta_t, t_array);
 rho_t      = LLS.transform2rho(theta_t, t_array);
 
 
-%% ====================== plot results ===========================
+%% ====================== plot density carpet ===========================
 
 figure
 
@@ -75,7 +75,7 @@ for i = 1:6
     
     % plot quasiparticle distribution
     sax = subplot(2,6,i+6);
-    imagesc(x_array, k_array , plt(rho_t{t_idx}) )
+    imagesc(x_array, rap_array , rho_t{t_idx}.getType(1,'d') )
     set(gca,'YDir','normal')
     colormap(hot)
     caxis([0 0.3])
@@ -90,3 +90,48 @@ for i = 1:6
 end
 
 
+
+%% ====================== plot characteristics ===========================
+
+the_t   = theta_t{end}.getType(1,'d');
+uj_t    = u_t{end}.getType(1,'d');
+wj_t    = w_t{end}.getType(1,'d');
+the_int = theta_init.getType(1,'d');
+
+% interpolates theta(x) to u(t,x,lambda)
+theta_u = interp2( x_array, rap_array, the_int, uj_t(:), wj_t(:), 'spline');
+theta_u = reshape(theta_u, N, M);
+
+
+
+figure
+sax1 = subplot(2,2,1);
+imagesc(rap_array, x_array, the_t )
+set(gca,'YDir','normal') 
+set(gca,'xticklabel',[])
+caxis([0 1])
+
+sax2 = subplot(2,2,2);
+imagesc(rap_array, x_array,  theta_u )
+set(gca,'YDir','normal')
+set(gca,'xticklabel',[])
+set(gca,'yticklabel',[])
+caxis([0 1])
+
+
+sax3 = subplot(2,2,3);
+imagesc(rap_array, x_array, uj_t / xmax )
+set(gca,'YDir','normal') 
+caxis([-1.7 1.7])
+
+sax4 = subplot(2,2,4);
+imagesc(rap_array, x_array, wj_t / rmax)
+set(gca,'YDir','normal') 
+set(gca,'yticklabel',[])
+caxis([-1.7 1.7])
+
+
+colormap(sax1,'hot')
+colormap(sax2,'hot')
+colormap(sax3,'parula')
+colormap(sax4,'parula')

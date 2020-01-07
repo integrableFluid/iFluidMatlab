@@ -38,31 +38,25 @@ methods (Access = public)
     end
     
     
-    function de = calcEnergyRapidDeriv(obj, t, x, rapid, type)
+    function de = getEnergyRapidDeriv(obj, t, x, rapid, type)
         de = (2.*sin(2.*rapid).*sinh((obj.couplings{1,2}(t,x)).*type).*sinh((obj.couplings{1,2}(t,x))))./(cos(2.*rapid)-cosh((obj.couplings{1,2}(t,x)).*type)).^2;
     end
 
     
-    function dp = calcMomentumRapidDeriv(obj, t, x, rapid, type)
+    function dp = getMomentumRapidDeriv(obj, t, x, rapid, type)
         dp = -(2.*sinh((obj.couplings{1,2}(t,x)).*type))./(cos(2.*rapid)-cosh((obj.couplings{1,2}(t,x)).*type));
     end
     
     
-    function dT = calcScatteringRapidDeriv(obj, t, x, rapid1, rapid2, type1, type2)
-        % Reshape input to right dimensions        
-        rapid1  = reshape(rapid1, max(size(rapid1,1), size(rapid1,2)), 1, max(size(rapid1,3), size(rapid1,4)), 1); % rapid1 is 1st index
-        rapid2  = reshape(rapid2, 1, max(size(rapid2,1), size(rapid2,2)), 1, max(size(rapid2,3), size(rapid2,4))); % rapid2 is 2nd index
-        type1   = reshape(type1, 1, 1, length(type1)); % type1 is 3rd index
-        type2   = reshape(type2, 1, 1, 1, length(type2)); % type2 is 4th index
-        
+    function dT = getScatteringRapidDeriv(obj, t, x, rapid1, rapid2, type1, type2)
         % Calculate contribution from 2 first terms
-        I_type  = repmat(eye(obj.Ntypes), 1 ,1, 1, 1);
-        I_type  = permute(I_type, [3 4 1 2]);
+        I_type  = repmat(eye(obj.Ntypes), 1 ,1, 1, 1, 1);
+        I_type  = permute(I_type, [3 5 1 4 2]);
         
         r_arg   = (rapid1-rapid2);
 
-        dT1     = (1 - I_type).*obj.calcMomentumRapidDeriv(t, x, r_arg, abs(type1-type2));
-        dT2     = obj.calcMomentumRapidDeriv(t, x, r_arg, type1+type2);
+        dT1     = (1 - I_type).*obj.getMomentumRapidDeriv(t, x, r_arg, abs(type1-type2));
+        dT2     = obj.getMomentumRapidDeriv(t, x, r_arg, type1+type2);
         
         dT1(isnan(dT1)) = 0; % removes any NaN
         dT2(isnan(dT2)) = 0; % removes any NaN
@@ -72,11 +66,11 @@ methods (Access = public)
         for i = 1:obj.Ntypes
             for j = 1:obj.Ntypes
                 for n = (abs(i-j)+2):2:(i+j-2)
-                    r_arg_temp = r_arg(:, :, min(i, size(r_arg,3)), min(j ,size(r_arg,4)) );
+                    r_arg_temp = r_arg(:, :, min(i, size(r_arg,3)), min(j ,size(r_arg,5)) );
                     
-                    temp = 2*obj.calcMomentumRapidDeriv(t, x, r_arg_temp, n);
+                    temp = 2*obj.getMomentumRapidDeriv(t, x, r_arg_temp, n);
                     temp(isnan(temp)) = 0; % removes any NaN
-                    dT3(:,:,i,j,:) = dT3(:,:,i,j,:) + temp;
+                    dT3(:,:,i,:,j) = dT3(:,:,i,:,j) + temp;
                 end
             end
         end
@@ -88,7 +82,7 @@ methods (Access = public)
     end
     
     
-    function de = calcEnergyCouplingDeriv(obj, coupIdx, t, x, rapid, type)
+    function de = getEnergyCouplingDeriv(obj, coupIdx, t, x, rapid, type)
         if coupIdx == 1
             % Derivative w.r.t. B
             de = repmat(-type, length(rapid), 1);
@@ -100,7 +94,7 @@ methods (Access = public)
     end
 
     
-    function dp = calcMomentumCouplingDeriv(obj, coupIdx, t, x, rapid, type)
+    function dp = getMomentumCouplingDeriv(obj, coupIdx, t, x, rapid, type)
         if coupIdx == 1
             % Derivative w.r.t. B
             dp = 0;
@@ -111,7 +105,7 @@ methods (Access = public)
     end
     
     
-    function dT = calcScatteringCouplingDeriv(obj, coupIdx, t, x, rapid1, rapid2, type1, type2)
+    function dT = getScatteringCouplingDeriv(obj, coupIdx, t, x, rapid1, rapid2, type1, type2)
         if coupIdx == 1 % deriv w.r.t. B
             dT  = 0;
             dT  = iFluidTensor( dT );
@@ -119,20 +113,14 @@ methods (Access = public)
         end 
         % Else it's deriv w.r.t. theta
         
-        % Reshape input to right dimensions
-        rapid1  = reshape(rapid1, length(rapid1), 1); % rapid1 is 1st index
-        rapid2  = reshape(rapid2, 1, length(rapid2)); % rapid2 is 2nd index
-        type1   = reshape(type1, 1, 1, length(type1)); % type1 is 3rd index
-        type2   = reshape(type2, 1, 1, 1, length(type2)); % type2 is 4th index
-        
         % Calculate contribution from 2 first terms
-        I_type  = repmat(eye(obj.Ntypes), 1 ,1, 1, 1);
-        I_type  = permute(I_type, [3 4 1 2]);
+        I_type  = repmat(eye(obj.Ntypes), 1 ,1, 1, 1, 1);
+        I_type  = permute(I_type, [3 5 1 4 2]);
         
         r_arg   = (rapid1-rapid2);
 
-        dT1     = (1 - I_type).*obj.calcMomentumCouplingDeriv(2, t, x, r_arg, abs(type1-type2));
-        dT2     = obj.calcMomentumCouplingDeriv(2, t, x, r_arg, type1+type2);
+        dT1     = (1 - I_type).*obj.getMomentumCouplingDeriv(2, t, x, r_arg, abs(type1-type2));
+        dT2     = obj.getMomentumCouplingDeriv(2, t, x, r_arg, type1+type2);
         
         dT1(isnan(dT1)) = 0; % removes any NaN
         dT2(isnan(dT2)) = 0; % removes any NaN
@@ -142,9 +130,9 @@ methods (Access = public)
         for i = 1:obj.Ntypes
             for j = 1:obj.Ntypes
                 for n = (abs(i-j)+2):2:(i+j-2)
-                    temp = 2*obj.calcMomentumCouplingDeriv(2, t, x, r_arg, n);
+                    temp = 2*obj.getMomentumCouplingDeriv(2, t, x, r_arg, n);
                     temp(isnan(temp)) = 0; % removes any NaN
-                    dT3(:,:,i,j,:) = dT3(:,:,i,j,:) + temp;
+                    dT3(:,:,i,:,j) = dT3(:,:,i,:,j) + temp;
                 end
             end
         end

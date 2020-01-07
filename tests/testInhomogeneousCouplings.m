@@ -1,4 +1,4 @@
-clear all; close all;
+clear all; %close all;
 
 
 % Reproduces the results found in the paper:
@@ -47,7 +47,7 @@ LLS1        = LiebLinigerModel(x_array, k_array, kw, couplings1);
 TEST        = SecondOrderSolver(LLS1, []);
 theta1_init = LLS1.calcThermalState(T);
 theta1_t    = TEST.propagateTheta(theta1_init, t_array);
-n1_t        = LLS1.calcCharges(theta1_t, 0, t_array);
+n1_t        = LLS1.calcCharges(0, theta1_t, t_array);
 
 
 % Anharmonic potential
@@ -56,7 +56,7 @@ LLS2        = LiebLinigerModel(x_array, k_array, kw, couplings2);
 TEST2       = SecondOrderSolver(LLS2, []);
 theta2_init = LLS2.calcThermalState(T);
 theta2_t    = TEST2.propagateTheta(theta2_init, t_array);
-n2_t        = LLS2.calcCharges(theta2_t, 0, t_array);
+n2_t        = LLS2.calcCharges(0, theta2_t, t_array);
 
 
 

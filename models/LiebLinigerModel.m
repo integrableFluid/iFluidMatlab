@@ -49,23 +49,17 @@ methods (Access = public)
     end
     
     
-    function de = calcEnergyRapidDeriv(obj, t, x, rapid, type)
+    function de = getEnergyRapidDeriv(obj, t, x, rapid, type)
         de = 2*rapid;
     end
 
     
-    function dp = calcMomentumRapidDeriv(obj, t, x, rapid, type)
+    function dp = getMomentumRapidDeriv(obj, t, x, rapid, type)
         dp = repmat(1, length(rapid), 1);
     end
     
     
-    function dT = calcScatteringRapidDeriv(obj, t, x, rapid1, rapid2, type1, type2)
-        % Reshape input to ensure right dimensions
-        rapid1  = reshape(rapid1, length(rapid1), 1); % rapid1 is 1st index
-        rapid2  = reshape(rapid2, 1, length(rapid2)); % rapid2 is 2nd index
-        type1   = reshape(type1, 1, 1, length(type1)); % type1 is 3rd index
-        type2   = reshape(type2, 1, 1, 1, length(type2)); % type2 is 4th index
-        
+    function dT = getScatteringRapidDeriv(obj, t, x, rapid1, rapid2, type1, type2)
         dT      = -2*obj.couplings{1,2}(t,x)./( (rapid1-rapid2).^2 + obj.couplings{1,2}(t,x).^2 );
         
         dT(isnan(dT)) = 0; % removes any NaN
@@ -74,7 +68,7 @@ methods (Access = public)
     end
     
     
-    function de = calcEnergyCouplingDeriv(obj, coupIdx, t, x, rapid, type)
+    function de = getEnergyCouplingDeriv(obj, coupIdx, t, x, rapid, type)
         if coupIdx == 1
             de = repmat(-1, length(rapid), 1);
         else
@@ -83,18 +77,12 @@ methods (Access = public)
     end
 
     
-    function dp = calcMomentumCouplingDeriv(obj, coupIdx, t, x, rapid, type)
+    function dp = getMomentumCouplingDeriv(obj, coupIdx, t, x, rapid, type)
        dp = 0;
     end
     
     
-    function dT = calcScatteringCouplingDeriv(obj, coupIdx, t, x, rapid1, rapid2, type1, type2)
-        % Reshape input to ensure right dimensions
-        rapid1  = reshape(rapid1, length(rapid1), 1); % rapid1 is 1st index
-        rapid2  = reshape(rapid2, 1, length(rapid2)); % rapid2 is 2nd index
-        type1   = reshape(type1, 1, 1, length(type1)); % type1 is 3rd index
-        type2   = reshape(type2, 1, 1, 1, length(type2)); % type2 is 4th index
-        
+    function dT = getScatteringCouplingDeriv(obj, coupIdx, t, x, rapid1, rapid2, type1, type2)
         if coupIdx == 2
             dT = 2*(rapid1-rapid2)./( (rapid1-rapid2).^2 + + obj.couplings{1,2}(t,x).^2 );
         else
@@ -134,20 +122,29 @@ methods (Access = public)
         mu0_fit     = fminsearch(fitfunc, mu0_guess,options);
         
         if setCouplingFlag % adjust couplings to result
-            couplings_new   = obj.getCouplings();
-            couplings_new{1,1}= @(t,x) mu0_fit - V_ext(t,x);
-
-            obj.setCouplings(couplings_new);
+            obj.couplings{1,1} = @(t,x) mu0_fit - V_ext(t,x);
         end
         
         function Natoms_fit = calcNA(obj, mu0, T, V_ext)
             % Calculates number of atoms in stationary TBA state given by
             % specied paramters.
-            couplings_fit   = obj.getCouplings();
-            couplings_fit{1,1}= @(t,x) mu0 - V_ext(t,x);
-            theta           = obj.calcThermalState(T, couplings_fit);
-            density         = obj.calcCharges(theta, 0, 0);
-            Natoms_fit      = trapz(permute(obj.x_grid, [5 2 3 4 1]), density);
+            mu_old      = obj.couplings{1,1};
+            mu_fit      = @(t,x) mu0 - V_ext(t,x);
+            obj.couplings{1,1} = mu_fit;
+
+            e_eff = obj.calcEffectiveEnergy(T, 0, obj.x_grid, obj.rapid_grid);
+            theta = obj.calcFillingFraction(e_eff);
+
+            obj.couplings{1,1} = mu_old;
+            
+            dp      = obj.getMomentumRapidDeriv(0, obj.x_grid, obj.rapid_grid, obj.type_grid);
+
+            h0          = ones(obj.N, 1);            
+            h0_dr       = obj.applyDressing(h0, theta, 0);
+                
+            density    = 1/(2*pi) * squeeze(sum( obj.rapid_w .* sum( double(dp.*theta.*h0_dr) , 3) , 1));
+            
+            Natoms_fit      = trapz(obj.x_grid, density);
         end % end nested function
     end
 
@@ -164,8 +161,8 @@ methods (Access = public)
         % Output:   v_eff -- Effective velocity (iFluidTensor)
         %           a_eff -- Effective acceleration (iFluidTensor)
         % =================================================================
-        de_dr   = obj.applyDressing(obj.calcEnergyRapidDeriv(t, x, rapid, type), theta, t);
-        dp_dr   = obj.applyDressing(obj.calcMomentumRapidDeriv(t, x, rapid, type), theta, t);
+        de_dr   = obj.applyDressing(obj.getEnergyRapidDeriv(t, x, rapid, type), theta, t);
+        dp_dr   = obj.applyDressing(obj.getMomentumRapidDeriv(t, x, rapid, type), theta, t);
         
         v_eff   = de_dr./dp_dr;
         
@@ -190,7 +187,7 @@ methods (Access = public)
         if ~isempty(obj.couplings{2,2}) || ~isempty(obj.couplings{3,2})
             % Calculate derivative of scattering phase with respect to
             % interaction c           
-            dT      = obj.calcScatteringCouplingDeriv(2, t, x, rapid, obj.rapid_grid, type, obj.type_grid);
+            dT      = obj.getScatteringCouplingDeriv(2, t, x, rapid, obj.rapid_aux, type, obj.type_aux);
             B       = 1/(2*pi) * dT.*transpose(obj.rapid_w .* theta);
         end
         
@@ -231,7 +228,7 @@ methods (Access = public)
                 t       = t_array(k);
             end
             
-            D       = obj.calcCharges(theta_k, 0, t); % density
+            D       = obj.calcCharges(0, theta_k, t); % density
             prefac  = factorial(n)^2 * (obj.couplings{1,2}(t,obj.x_grid)).^n / 2^n ./ D.^n;
         
             % Find integers m_j to sum over
@@ -297,12 +294,16 @@ methods (Access = public)
         % Output:   B     -- cell array of all B_i funcs up to order 2*n-1
         % =================================================================
         b       = cell( 1 , 2*n - 1 + 2); % added two dummy indices
-        b(:)    = {iFluidTensor( obj.N , 1 , 1 , 1 , obj.M )};
+        b(:)    = {iFluidTensor( obj.N , obj.M)};
         
-        kernel1 = -1/(2*pi)*obj.calcScatteringRapidDeriv(t, obj.x_grid, obj.rapid_grid, obj.rapid_grid, obj.type_grid, obj.type_grid);
-        kernel2 = -(obj.rapid_grid - transpose(obj.rapid_grid)).*kernel1./obj.couplings{1,2}(t,obj.x_grid);
+        kernel1 = -1/(2*pi)*obj.getScatteringRapidDeriv(t, obj.x_grid, obj.rapid_grid, obj.rapid_aux, obj.type_grid, obj.type_aux);
+        kernel2 = -(obj.rapid_grid - permute(obj.rapid_grid, [4 2 3 1])).*kernel1./obj.couplings{1,2}(t,obj.x_grid);
         
-        X1      = eye(obj.N) - kernel1.*transpose(obj.rapid_w.*theta);
+        I       = iFluidTensor(obj.N, obj.M, obj.Ntypes, obj.N, obj.Ntypes);
+        I.setIdentity();
+
+        
+        X1      = I - kernel1.*transpose(obj.rapid_w.*theta);
         
         for i = 1:(2*n - 1)                
             if mod(i,2) == 0 % i even

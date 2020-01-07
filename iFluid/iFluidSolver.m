@@ -110,11 +110,11 @@ methods (Access = public)
         theta_t{1}      = theta_init;
         
         u_t             = cell(1, Nsteps+1);
-        u_init          = iFluidTensor( repmat( obj.x_grid, obj.N, 1, obj.Ntypes, 1) );
+        u_init          = iFluidTensor( repmat( obj.x_grid, obj.N, 1, obj.Ntypes) );
         u_t{1}          = u_init;
 
         w_t             = cell(1, Nsteps+1);
-        w_init          = iFluidTensor( repmat( obj.rapid_grid, 1, 1, obj.Ntypes, 1, obj.M) );
+        w_init          = iFluidTensor( repmat( obj.rapid_grid, 1, obj.M, obj.Ntypes) );
         w_t{1}          = w_init;
 
         % Initializes the propagation, calculating and internally storing
@@ -187,10 +187,10 @@ methods (Access = protected)
         %                          x_grid, and type_grid.
         %           rapid_int   -- Rapidity values to interpolate to
         %                           (should be iFluidTensor sized
-        %                            [N, 1, Ntypes, 1 ,M] )
+        %                            [N, M, Ntypes] )
         %           x_int       -- Spatial values to interpolate to
         %                           (should be iFluidTensor sized
-        %                            [N, 1, Ntypes, 1 ,M] )
+        %                            [N, M, Ntypes] )
         %           extrapFlag  -- if true, enable extrapolations
         %                          if false, all extrap. values are zero
         % Output:   tensor_int -- iFluidTensor interpolated to input grids.
@@ -199,14 +199,14 @@ methods (Access = protected)
         % Cast to matrix form
         x_int       = double(x_int);
         rapid_int   = double(rapid_int);
-        mat_grid    = double(tensor_grid); % should be (N,1,Nt,1,M)
+        mat_grid    = double(tensor_grid); % should be (N,M,Nt)
         
         % Need spacial dimension as first index in order to use (:) linearization
-        x_int       = permute(x_int, [5 1 3 4 2]); % (M,N,Nt,1,1)
-        rapid_int   = permute(rapid_int, [5 1 3 4 2]);
+        x_int       = permute(x_int, [2 1 3]); % (M,N,Nt)
+        rapid_int   = permute(rapid_int, [2 1 3]);
         
-        x_g         = permute(obj.x_grid, [5 1 3 4 2]); % (M,N,Nt,1,1)
-        rapid_g     = permute(obj.rapid_grid, [5 1 3 4 2]);
+        x_g         = permute(obj.x_grid, [2 1 3]); % (M,N,Nt)
+        rapid_g     = permute(obj.rapid_grid, [2 1 3]);
         
         % Enforce periodic boundary conditions
         if obj.periodRapid 
@@ -215,7 +215,7 @@ methods (Access = protected)
         
         % Get matrix representation of iFluidTensor and pemute spacial index
         % to first.
-        mat_grid    = permute(mat_grid, [5 1 3 4 2]);
+        mat_grid    = permute(mat_grid, [2 1 3]);
         mat_int     = zeros(obj.M, obj.N, obj.Ntypes);
         
         for i = 1:obj.Ntypes
@@ -234,8 +234,8 @@ methods (Access = protected)
             mat_int(:,:,i) = mat_tmp;
         end
         
-        % Add dummy indices and reshape back to original indices
-        mat_int = permute(mat_int, [2 5 3 4 1] );
+        % Reshape back to original indices
+        mat_int = permute(mat_int, [2 1 3] );
         
         tensor_int = iFluidTensor(mat_int);
     end

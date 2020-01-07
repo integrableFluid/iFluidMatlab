@@ -95,7 +95,7 @@ methods (Access = protected)
 
             % Use interpolation to find theta_prev at x_back, r_back and
             % assign values to theta_next.
-            theta_next = obj.interpPhaseSpace(theta_prev, r_back, x_back, obj.extrapFlag);
+            theta_next = obj.interpPhaseSpace(theta_prev, r_back, x_back, obj.extrapFlag); 
             u_next     = obj.interpPhaseSpace(u_prev, r_back, x_back, true); % always extrapolate u
             w_next     = obj.interpPhaseSpace(w_prev, r_back, x_back, true); % always extrapolate u
         end % end nested function
