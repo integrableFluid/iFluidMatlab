@@ -46,7 +46,7 @@ LLS        = LiebLinigerModel(x_array, k_array, kw, couplings);
 Solver2    = SecondOrderSolver(LLS, []);
 
 
-offset      = 4;
+offset      = 3;
 coup_init   = { @(t,x) 2 - dw(t,x,offset)  , @(t,x) 1};
 theta_init  = LLS.calcThermalState(T, coup_init);
 
@@ -75,7 +75,7 @@ for i = 1:6
     
     % plot quasiparticle distribution
     sax = subplot(2,6,i+6);
-    imagesc(x_array, k_array , plt(rho_t{t_idx}) )
+    imagesc(x_array, k_array , rho_t{t_idx}.getType(1,'d') )
     set(gca,'YDir','normal')
     colormap(hot)
     caxis([0 0.3])

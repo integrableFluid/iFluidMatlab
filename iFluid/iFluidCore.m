@@ -95,19 +95,11 @@ methods (Access = public)
             error('couplings must be cell array of anonymous functions!')
         end
         
-        obj.N           = length(rapid_grid);
-        obj.M           = length(x_grid);
-        obj.Ntypes      = Ntypes;
-        
-        % Reshape grids to right format
-        obj.x_grid      = reshape(x_grid, 1, obj.M); % 2nd index is space
-        obj.rapid_grid  = reshape(rapid_grid, obj.N, 1); % 1st index is rapidity
-        obj.type_grid   = reshape( 1:Ntypes, 1, 1, Ntypes ); % Types are 3rd index
-        obj.rapid_w     = reshape( rapid_w , length(rapid_w), 1); % 1st index is rapidity
-        
-        obj.rapid_aux   = permute(obj.rapid_grid, [4 2 3 1]);
-        obj.type_aux    = permute(obj.type_grid, [1 2 5 4 3]);
+        % Reshape and store grids
+        obj.setGrids(x_grid, rapid_grid, rapid_w, Ntypes);
 
+        % Fill out cell arrays with anonymous functions
+        obj.setCouplings(couplings);
         
         % Copy fields of Options struct into class properties
         if nargin > 4
@@ -118,9 +110,6 @@ methods (Access = public)
                 end
             end
         end
-        
-        % Fill out cell arrays with anonymous functions
-        obj.setCouplings(couplings);
         
     end
     
@@ -147,6 +136,24 @@ methods (Access = public)
         rapid_grid  = obj.rapid_grid;
         type_grid   = obj.type_grid;
         rapid_w     = obj.rapid_w;
+    end
+    
+    
+    function setGrids(obj, x_grid, rapid_grid, rapid_w, Ntypes)
+        obj.N           = length(rapid_grid);
+        obj.M           = length(x_grid);
+        obj.Ntypes      = Ntypes;
+        
+        
+        % Reshape grids to right format
+        obj.rapid_grid  = reshape(rapid_grid, obj.N, 1); % 1st index is rapidity
+        obj.x_grid      = reshape(x_grid, 1, obj.M); % 2nd index is space
+        obj.type_grid   = reshape( 1:Ntypes, 1, 1, Ntypes ); % Types are 3rd index
+        
+        obj.rapid_aux   = permute(obj.rapid_grid, [4 2 3 1]);
+        obj.type_aux    = permute(obj.type_grid, [1 2 5 4 3]);
+        
+        obj.rapid_w     = reshape( rapid_w , length(rapid_w), 1); % 1st index is rapidity
     end
     
     
@@ -269,7 +276,7 @@ methods (Access = public)
             end
 
             dp      = obj.getMomentumRapidDeriv(t, obj.x_grid, obj.rapid_grid, obj.type_grid);
-            kernel  = 1/(2*pi) * obj.calcScatteringRapidDeriv(t, obj.x_grid, obj.rapid_grid, obj.rapid_aux, obj.type_grid, obj.type_aux); 
+            kernel  = 1/(2*pi) * obj.getScatteringRapidDeriv(t, obj.x_grid, obj.rapid_grid, obj.rapid_aux, obj.type_grid, obj.type_aux); 
             
             rhoS{n} = dp/(2*pi) - kernel*(obj.rapid_w.*rho_n);
             theta{n}= rho_n./rhoS{n};

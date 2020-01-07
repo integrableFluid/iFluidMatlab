@@ -1,4 +1,4 @@
-classdef LiebLinigerModel_SI
+classdef LiebLinigerModel_SI < LiebLinigerModel
     % Wrapper class for LiebLinigerModel.
     % Converts inputs from SI-units to iFluid internal units
     % Converts outputs to SI-units
@@ -15,13 +15,11 @@ properties (Access = public)
     as_si       = 5.2e-9; % Rb-87 scattering length
     
     % TBA unit scales     
-    Eg_si       = []; % energy scale
-    Lg_si       = []; % length scale
-    t_si        = []; % time scale
-    T_si        = []; % temperature scale
-    P_si        = []; % momentum scale
-    
-    LLM         = []; % LiebLinigerModel
+    Eg_si       = 1; % energy scale
+    Lg_si       = 1; % length scale
+    t_si        = 1; % time scale
+    T_si        = 1; % temperature scale
+    P_si        = 1; % momentum scale
 
 end % end private properties
 
@@ -30,10 +28,12 @@ methods (Access = public)
     
     %% Constructor
     function obj = LiebLinigerModel_SI(omega_scale, x_grid, rapid_grid, rapid_w, couplings, Options)
-        if nargin < 5
+        if nargin < 6
             % If no options, pass empty struct to LiebLiniger constructor
             Options = struct;
         end
+        
+        obj = obj@LiebLinigerModel(x_grid, rapid_grid, rapid_w, couplings, Options);
         
         % Calculate unit scales
         obj.Eg_si   = 0.5*obj.hbar_si*omega_scale; 
@@ -42,14 +42,9 @@ methods (Access = public)
         obj.T_si    = obj.Eg_si/obj.kB_si;
         obj.P_si    = obj.hbar_si/obj.Lg_si;
         
-        % Convert grids and couplings to TBA units
-        x_grid      = obj.convert2TBA(x_grid, 'length');
-        rapid_grid  = obj.convert2TBA(rapid_grid, 'rapidity');
-        rapid_w     = obj.convert2TBA(rapid_w, 'rapidity');
-        couplings   = obj.convert2TBA(couplings, 'couplings');
-        
-        % Instantiate LiebLinigerModel
-        obj.LLM     = LiebLinigerModel(x_grid, rapid_grid, rapid_w, couplings, Options);
+        obj.setGrids(x_grid, rapid_grid, rapid_w, 1);
+        obj.setCouplings(couplings);
+
     end
     
     
@@ -147,7 +142,7 @@ methods (Access = public)
         end
         
         % Run LLS function
-        mu0_fit = obj.LLS.fitAtomnumber(T, V_ext, Natoms, mu0_guess, setCouplingFlag);
+        mu0_fit = fitAtomnumber@LiebLinigerModel(obj, T, V_ext, Natoms, mu0_guess, setCouplingFlag);
         
         % Convert TBA --> SI
         mu0_fit = obj.convert2SI(mu0_fit, 'energy');
@@ -158,27 +153,34 @@ methods (Access = public)
         % Convert SI --> TBA
         couplings = obj.convert2TBA(couplings, 'couplings');
         
-        obj.LLS.setCouplings(couplings);
+        setCouplings@LiebLinigerModel(obj, couplings);
     end
     
     
     function couplings = getCouplings(obj)
-        couplings = obj.LLS.getCouplings();
+        couplings = getCouplings@LiebLinigerModel(obj);
         
         % Convert TBA --> SI
         couplings = obj.convert2SI(couplings, 'couplings');
     end
-    
-    
-    function [theta_t, u_t] = propagateTheta(obj, theta_init, t_array)
-        % Convert SI --> TBA
-        t_array = obj.convert2TBA(t_array, 'time');
-        
-        % Run LLS function
-        [theta_t, u_t] = obj.LLS.propagateTheta(theta_init, t_array);
+
+    function [x_grid, rapid_grid, type_grid, rapid_w] = getGrids(obj)
+        [x_grid, rapid_grid, type_grid, rapid_w] = getGrids@LiebLinigerModel(obj);
         
         % Convert TBA --> SI
-%         u_t = obj.convert2SI(u_t, 'length');
+%         x_grid      = obj.convert2SI(x_grid, 'length');
+%         rapid_grid  = obj.convert2SI(rapid_grid, 'rapidity');
+%         rapid_w     = obj.convert2SI(rapid_w, 'rapidity');
+    end
+    
+    
+    function setGrids(obj, x_grid, rapid_grid, rapid_w, Ntypes)
+        % Convert SI --> TBA
+        x_grid      = obj.convert2TBA(x_grid, 'length');
+        rapid_grid  = obj.convert2TBA(rapid_grid, 'rapidity');
+        rapid_w     = obj.convert2TBA(rapid_w, 'rapidity');
+        
+        setGrids@LiebLinigerModel(obj, x_grid, rapid_grid, rapid_w, Ntypes);
     end
     
     
@@ -188,10 +190,10 @@ methods (Access = public)
             t_array = obj.convert2TBA(t_array, 'time');
 
             % Run LLS function
-            [rho, rhoS] = obj.LLS.transform2rho(theta, t_array);
+            [rho, rhoS] = transform2rho@LiebLinigerModel(obj, theta, t_array);
         else
             % Run LLS function
-            [rho, rhoS] = obj.LLS.transform2rho(theta);
+            [rho, rhoS] = transform2rho@LiebLinigerModel(obj, theta);
         end
     end
     
@@ -206,10 +208,10 @@ methods (Access = public)
             t_array = obj.convert2TBA(t_array, 'time');
 
             % Run LLS function
-            [theta, rhoS] = obj.LLS.transform2theta(rho, t_array);
+            [theta, rhoS] = transform2theta@LiebLinigerModel(obj, rho, t_array);
         else
             % Run LLS function
-            [theta, rhoS] = obj.LLS.transform2theta(rho);
+            [theta, rhoS] = transform2theta@LiebLinigerModel(obj, rho);
         end
     end
     
@@ -219,7 +221,7 @@ methods (Access = public)
         t_array = obj.convert2TBA(t_array, 'time');
         
         % Run LLS function
-        [q, j] = obj.LLS.calcCharges(theta, c_idx, t_array);
+        [q, j] = calcCharges@LiebLinigerModel(obj, theta, c_idx, t_array);
         
         % Convert TBA --> SI
         % NOTE: Doesn't convert currents
@@ -249,9 +251,9 @@ methods (Access = public)
         
         if nargin == 3
             TBA_couplings   = obj.convert2TBA(TBA_couplings, 'couplings');
-            [theta, e_eff]  = obj.LLS.calcThermalState(T, TBA_couplings);
+            [theta, e_eff]  = calcThermalState@LiebLinigerModel(obj, T, TBA_couplings);
         else
-            [theta, e_eff]  = obj.LLS.calcThermalState(T);
+            [theta, e_eff]  = calcThermalState@LiebLinigerModel(obj, T);
         end
     end
     

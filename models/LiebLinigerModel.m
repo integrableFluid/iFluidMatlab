@@ -122,20 +122,29 @@ methods (Access = public)
         mu0_fit     = fminsearch(fitfunc, mu0_guess,options);
         
         if setCouplingFlag % adjust couplings to result
-            couplings_new   = obj.getCouplings();
-            couplings_new{1,1}= @(t,x) mu0_fit - V_ext(t,x);
-
-            obj.setCouplings(couplings_new);
+            obj.couplings{1,1} = @(t,x) mu0_fit - V_ext(t,x);
         end
         
         function Natoms_fit = calcNA(obj, mu0, T, V_ext)
             % Calculates number of atoms in stationary TBA state given by
             % specied paramters.
-            couplings_fit   = obj.getCouplings();
-            couplings_fit{1,1}= @(t,x) mu0 - V_ext(t,x);
-            theta           = obj.calcThermalState(T, couplings_fit);
-            density         = obj.calcCharges(0, theta, 0);
-            Natoms_fit      = trapz(x_grid, density);
+            mu_old      = obj.couplings{1,1};
+            mu_fit      = @(t,x) mu0 - V_ext(t,x);
+            obj.couplings{1,1} = mu_fit;
+
+            e_eff = obj.calcEffectiveEnergy(T, 0, obj.x_grid, obj.rapid_grid);
+            theta = obj.calcFillingFraction(e_eff);
+
+            obj.couplings{1,1} = mu_old;
+            
+            dp      = obj.getMomentumRapidDeriv(0, obj.x_grid, obj.rapid_grid, obj.type_grid);
+
+            h0          = ones(obj.N, 1);            
+            h0_dr       = obj.applyDressing(h0, theta, 0);
+                
+            density    = 1/(2*pi) * squeeze(sum( obj.rapid_w .* sum( double(dp.*theta.*h0_dr) , 3) , 1));
+            
+            Natoms_fit      = trapz(obj.x_grid, density);
         end % end nested function
     end
 
