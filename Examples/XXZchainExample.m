@@ -1,5 +1,7 @@
 clear all; close all;
 
+% In this example an XXZ chain is subject to a parabolic magnetic
+% confinement, which decreases in strength over time.
 
 % Add paths to iFluid directories
 addpath(['..' filesep 'models' filesep])

@@ -1,10 +1,10 @@
 clear all; close all;
 
-set(0, 'DefaultTextInterpreter', 'latex');
-set(0, 'DefaultLegendInterpreter', 'latex');
-set(0, 'defaultAxesTickLabelInterpreter','latex');
-set(0, 'defaultAxesFontSize',14);
+% In this example the dynamics of a quantum Newtons cradle are calculated.
+% The cradle consist of two clouds of 1D Bose gases, which oscillate in a
+% harmonic confinemt. As the clouds pass through each other, they interact.
 
+% Add paths to iFluid directories
 addpath(['..' filesep 'models' filesep])
 addpath(['..' filesep 'solvers' filesep])
 addpath(['..' filesep 'iFluid' filesep])

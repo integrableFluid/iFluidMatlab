@@ -1,5 +1,8 @@
 clear all; close all;
 
+% In this example dynamics of a partitioning protocol in the relativistic
+% sinh-Gordon model are calculated.
+
 % Add paths to iFluid directories
 addpath(['..' filesep 'models' filesep])
 addpath(['..' filesep 'solvers' filesep])
