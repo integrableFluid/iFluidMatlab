@@ -41,6 +41,7 @@ properties (Access = protected)
     % Optional parameters (default values specified here). 
     extrapFlag      = false;    % Flag for using extrapolation during propagation (useful for open systems)
     periodRapid     = false;    % Flag for periodic boundary conditions on rapidity
+    calcCharac      = true;     % Flag for if characteristics are calculated
 
 end % end protected properties
 
@@ -171,8 +172,14 @@ methods (Access = protected)
         % Use interpolation to find theta_prev at x_back, r_back and
         % assign values to theta.
         theta_next      = obj.interpPhaseSpace(theta_prev, r_back, x_back, obj.extrapFlag);
-        u_next          = obj.interpPhaseSpace(u_prev, r_back, x_back, true ); % always extrapolate u
-        w_next          = obj.interpPhaseSpace(w_prev, r_back, x_back, true ); % always extrapolate u      
+        
+        if obj.calcCharac
+            u_next  = obj.interpPhaseSpace(u_prev, r_back, x_back, true); % always extrapolate u
+            w_next  = obj.interpPhaseSpace(w_prev, r_back, x_back, true); % always extrapolate w
+        else
+            u_next  = u_prev;
+            w_next  = w_prev;
+        end     
     end
     
     
@@ -230,6 +237,7 @@ methods (Access = protected)
                 mat_tmp = interp2( rapid_g, x_g, mat_g, rapid_i(:), x_i(:), 'spline', 0);
             end
            
+            mat_tmp(isnan(mat_tmp)) = 0;
             mat_tmp = reshape(mat_tmp, obj.M, obj.N);
             mat_int(:,:,i) = mat_tmp;
         end

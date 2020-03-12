@@ -62,7 +62,11 @@ methods (Access = public)
             case 'length'
                 quantity_tba = quantity_si/obj.Lg_si;
             case 'temperature'
-                quantity_tba = quantity_si/obj.T_si;
+                if isa(quantity_si, 'function_handle')
+                    quantity_tba = @(x) quantity_si( x*obj.Lg_si )/obj.T_si;
+                else
+                    quantity_tba = quantity_si/obj.T_si;
+                end
             case 'couplings'
                 % Anonymous functions are in SI units and take SI
                 % arguments. Thus, convert arguments to SI and output to
@@ -105,7 +109,11 @@ methods (Access = public)
             case 'length'
                 quantity_si = quantity_tba*obj.Lg_si;
             case 'temperature'
-                quantity_si = quantity_tba*obj.T_si;
+                if isa(quantity_tba, 'function_handle')
+                    quantity_si = @(x) quantity_tba( x/obj.Lg_si )*obj.T_si;
+                else
+                    quantity_si = quantity_tba*obj.T_si;
+                end
             case 'couplings'
                 % Couplings
                 quantity_si{1,1} = @(t, x) quantity_tba{1,1}( t/obj.t_si, x/obj.Lg_si )*obj.Eg_si; % mu is in units of energy
@@ -216,12 +224,12 @@ methods (Access = public)
     end
     
     
-    function [q, j] = calcCharges(obj, theta, c_idx, t_array)
+    function [q, j] = calcCharges(obj, c_idx, theta, t_array)
         % Convert SI --> TBA
         t_array = obj.convert2TBA(t_array, 'time');
         
         % Run LLS function
-        [q, j] = calcCharges@LiebLinigerModel(obj, theta, c_idx, t_array);
+        [q, j] = calcCharges@LiebLinigerModel(obj, c_idx, theta, t_array);
         
         % Convert TBA --> SI
         % NOTE: Doesn't convert currents
@@ -250,7 +258,6 @@ methods (Access = public)
         T = obj.convert2TBA(T, 'temperature');
         
         if nargin == 3
-            TBA_couplings   = obj.convert2TBA(TBA_couplings, 'couplings');
             [theta, e_eff]  = calcThermalState@LiebLinigerModel(obj, T, TBA_couplings);
         else
             [theta, e_eff]  = calcThermalState@LiebLinigerModel(obj, T);

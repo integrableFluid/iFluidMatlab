@@ -60,7 +60,7 @@ methods (Access = public)
     
     
     function dT = getScatteringRapidDeriv(obj, t, x, rapid1, rapid2, type1, type2)
-        dT      = -2*obj.couplings{1,2}(t,x)./( (rapid1-rapid2).^2 + obj.couplings{1,2}(t,x).^2 );
+        dT      = -2*obj.couplings{1,2}(t,x)./( (rapid1-rapid2).^2 + obj.couplings{1,2}(t,x).^2 ); 
         
         dT(isnan(dT)) = 0; % removes any NaN
         
@@ -147,7 +147,7 @@ methods (Access = public)
             Natoms_fit      = trapz(obj.x_grid, density);
         end % end nested function
     end
-
+    
 
     function [v_eff, a_eff] = calcEffectiveVelocities(obj, theta, t, x, rapid, type)        
         % =================================================================
@@ -161,6 +161,12 @@ methods (Access = public)
         % Output:   v_eff -- Effective velocity (iFluidTensor)
         %           a_eff -- Effective acceleration (iFluidTensor)
         % =================================================================
+        if nargin == 3
+            x       = obj.x_grid;
+            rapid   = obj.rapid_grid;
+            type    = obj.type_grid;
+        end
+        
         de_dr   = obj.applyDressing(obj.getEnergyRapidDeriv(t, x, rapid, type), theta, t);
         dp_dr   = obj.applyDressing(obj.getMomentumRapidDeriv(t, x, rapid, type), theta, t);
         
