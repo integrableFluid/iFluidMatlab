@@ -141,8 +141,8 @@ methods (Access = public)
                 Hk(:,k) = obj.calcH(k-1, t, theta);
                 
                 if calcV
-                    Xi_m(:,:,k) = double( obj.calcXi(k-1, t, theta, -1) );
-                    Xi_p(:,:,k) = double( obj.calcXi(k-1, t, theta, +1) );
+                    Xi_m(:,:,k) = double( obj.calcEps(k-1, t, theta, -1) );
+                    Xi_p(:,:,k) = double( obj.calcEps(k-1, t, theta, +1) );
                 end
             end
             
@@ -165,27 +165,21 @@ end % end public methods
 methods (Access = private)
     
     function Hk = calcH(obj, k, t, theta )
-        Xi      = obj.calcXi( k, t, theta, -1);
-        Hk      = ( 1 + 2*sin(pi*obj.couplings{1,1}(t,obj.x_grid)*(2*k + 1))/pi .* sum( double(obj.rapid_w.*Xi.*theta.*exp(obj.rapid_grid)) , 1 ) );
+        eps     = obj.calcEps( k, t, theta, -1);
+        Hk      = ( 1 + 2*sin(pi*obj.couplings{1,1}(t,obj.x_grid)*(2*k + 1))/pi .* sum( double(obj.rapid_w.*eps.*theta.*exp(obj.rapid_grid)) , 1 ) );
     end
 
-    function Xi = calcXi(obj, k, t, theta, sgn)
+    function eps = calcEps(obj, k, t, theta, sgn)
         % Supporting function for calcVertexExpval()
-        rapid_arg   = obj.rapid_grid - permute(obj.rapid_grid, [4 2 3 1]);
-        chi         = obj.calcChi(k, t, obj.x_grid, rapid_arg);
+        rapid_arg   = - (obj.rapid_grid - permute(obj.rapid_grid, [4 2 3 1]));        
+        chi         = 1/pi*imag(exp(2*k*1i*pi*obj.couplings{1,1}(t,obj.x_grid))./sinh(sign(sgn)*rapid_arg - 1i*pi*obj.couplings{1,1}(t,obj.x_grid)));
         
         X           = permute(eye(obj.N), [1 3 4 2]) - chi.*transpose(obj.rapid_w.*theta); 
         epsi        = iFluidTensor(exp(sign(sgn)*obj.rapid_grid));
 
-        Xi          = X\epsi;   
+        eps         = X\epsi;   
     end
     
-
-    function chi = calcChi(obj, k, t, x, rapid)
-        % Supporting function for calcVertexExpval()
-        chi = 1i/(2*pi) * ( exp(-1i*2*k*obj.couplings{1,1}(t,x))./sinh( rapid + 1i*pi*obj.couplings{1,1}(t,x) ) ...
-                            - exp(1i*2*k*obj.couplings{1,1}(t,x))./sinh( rapid - 1i*pi*obj.couplings{1,1}(t,x) ) );
-    end
 
 end % end private methods
 

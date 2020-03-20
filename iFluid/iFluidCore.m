@@ -308,10 +308,11 @@ methods (Access = public)
         % Input :   c_idx   -- charge indices
         %           theta   -- filling function (cell array of iFluidTensor)
         %           t_array -- array of times corresponding to theta
-        %           calcV   -- (optional) if true, calc V fields
+        %           calcV   -- (optional) if true, calc form factors
         % Output:   q       -- charge exp. vals for each t in t_array
         %           j       -- current exp. vals for each t in t_array
-        %           V       -- dressed operator eigenvalues (for correlations)
+        %           Vq      -- one-particle charge form factors
+        %           Vq      -- one-particle current form factors
         % ================================================================= 
         if iscell(theta)
             Nsteps = length(theta); % number of time steps
