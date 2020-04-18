@@ -84,7 +84,7 @@ methods (Access = public)
     
     function dT = getScatteringCouplingDeriv(obj, coupIdx, t, x, rapid1, rapid2, type1, type2)
         if coupIdx == 2
-            dT = 2*(rapid1-rapid2)./( (rapid1-rapid2).^2 + + obj.couplings{1,2}(t,x).^2 );
+            dT = 2*(rapid1-rapid2)./( (rapid1-rapid2).^2 + obj.couplings{1,2}(t,x).^2 );
         else
             dT = 0;
         end
@@ -214,6 +214,33 @@ methods (Access = public)
     end
     
     
+    function a_eff = calcAccTest(obj, rho, t)               
+%         ct      = obj.couplings{1,2}(t,0);
+%         c0      = obj.couplings{1,2}(0,0);
+%         
+%         if ct > 0.2*c0
+%             dp      = obj.getMomentumRapidDeriv(t, obj.x_grid, obj.rapid_grid, obj.type_grid);
+%             kernel  = 1/(2*pi) * obj.getScatteringRapidDeriv(t, obj.x_grid, obj.rapid_grid, obj.rapid_aux, obj.type_grid, obj.type_aux); 
+%             
+%             rhoS    = dp/(2*pi) - kernel*(obj.rapid_w.*rho);
+%             theta   = rho./rhoS;
+% 
+%             [~, a_eff]  = obj.calcEffectiveVelocities(theta, t);
+%         else
+%             dT      = obj.getScatteringCouplingDeriv(2, t, obj.x_grid, obj.rapid_grid, obj.rapid_aux, obj.type_grid, obj.type_aux);
+%             a_eff   = obj.couplings{2,2}(t,obj.x_grid).*(dT.*transpose(obj.rapid_w))*rho;
+%         end
+
+        dT      = 2*(obj.rapid_grid-obj.rapid_aux)./( (obj.rapid_grid-obj.rapid_aux).^2 + obj.couplings{1,2}(t,obj.x_grid).^2 );
+        dT      = iFluidTensor(dT);
+%         dT      = obj.getScatteringCouplingDeriv(2, t, obj.x_grid, obj.rapid_grid, obj.rapid_aux, obj.type_grid, obj.type_aux);
+        a_eff   = obj.couplings{2,2}(t,obj.x_grid).*(dT.*transpose(obj.rapid_w))*rho;
+        
+        
+        a_eff = obj.couplings{3,1}(t,obj.x_grid) + a_eff; 
+    end
+    
+    
     function g_n = calcLocalCorrelator(obj, n, theta, t_array)
         % =================================================================
         % Purpose : Calculates local n-body correlation function
@@ -234,7 +261,7 @@ methods (Access = public)
                 t       = t_array(k);
             end
             
-            D       = obj.calcCharges(0, theta_k, t); % density
+            D       = obj.calcCharges(0, theta_k, t)'; % density
             prefac  = factorial(n)^2 * (obj.couplings{1,2}(t,obj.x_grid)).^n / 2^n ./ D.^n;
         
             % Find integers m_j to sum over
