@@ -2,7 +2,13 @@ classdef CollisionSolver < iFluidSolver
     
 properties (Access = protected)
     theta_mid = []; % Midpoint filling required for taking 2nd order step
+    
+    I_prev = [];
+    J_prev = [];
+    
     lperp = [];
+    gamma = [];
+    
     gridmap_p = [];
     gridmap_m = [];
     P1 = [];
@@ -14,10 +20,11 @@ end % end protected properties
 methods (Access = public)
     
     % Superclass constructor
-    function obj = CollisionSolver(coreObj, lperp, Options)        
+    function obj = CollisionSolver(coreObj, lperp, gamma, Options)        
         obj = obj@iFluidSolver(coreObj, Options);
         
         obj.lperp = lperp;
+        obj.gamma = gamma;
         obj.calcCharac = false;
                 
         
@@ -45,12 +52,9 @@ methods (Access = public)
     end
     
     
-    function [I, J] = calcCollisionIntegral(obj, t, theta, nu)
+    function [I, J] = calcCollisionIntegral(obj, rhoP, rhoH, nu)
 
-        % calculate rho_p and rho_h on collision grids
-        [rhoP, rhoS] = obj.coreObj.transform2rho(theta, t);
-        rhoH    = rhoS - rhoP;
-        
+        % calculate rho_p and rho_h on collision grids        
         rhoP_m = obj.interp2map( rhoP, obj.gridmap_m);
         rhoP_p = obj.interp2map( rhoP, obj.gridmap_p);
         rhoH_p = obj.interp2map( rhoH, obj.gridmap_p);
@@ -58,10 +62,10 @@ methods (Access = public)
         
 
         % evaluate collision integral
-        Iint    = obj.P1.*(-theta.*rhoP.t().*rhoH_m.*rhoH_m.t()        + ...
-                            (1-theta).*rhoH.t().*rhoP_m.*rhoP_m.t().*nu)+ ...
-                  obj.P2.*(-theta.*rhoP.t().*rhoH_p.*rhoH_p.t().*nu    + ...
-                            (1-theta).*rhoH.t().*rhoP_p.*rhoP_p.t()         );
+        Iint    = obj.P1.*(-rhoP.*rhoP.t().*rhoH_m.*rhoH_m.t()        + ...
+                            rhoH.*rhoH.t().*rhoP_m.*rhoP_m.t().*nu)   + ...
+                  obj.P2.*(-rhoP.*rhoP.t().*rhoH_p.*rhoH_p.t().*nu    + ...
+                            rhoH.*rhoH.t().*rhoP_p.*rhoP_p.t()         );
                    
         % integrate Iint over rapid_aux
         I       = sum(Iint.*permute(obj.rapid_w, [4 2 3 1]), 4);
@@ -71,7 +75,7 @@ methods (Access = public)
         dx      = obj.x_grid(2) - obj.x_grid(1);
         
         Jint    = (obj.P1/(2*Nat)).*( rhoP.*rhoP.t().*rhoH_m.*rhoH_m.t() - ...
-                                       rhoH.*rhoH.t().*rhoP_m.*rhoP_m.t().*nu  );
+                                      rhoH.*rhoH.t().*rhoP_m.*rhoP_m.t().*nu);
                                    
         J       = sum(Jint.*permute(obj.rapid_w, [4 2 3 1]), 4);
         J       = sum( dx*sum(J.*obj.rapid_w,1), 2, 'd');
@@ -105,8 +109,17 @@ methods (Access = protected)
 
         % Calculate first theta_mid at t = dt/10/2 using first order
         % step, then use that to calculate the actual theta_mid at
-        % t = dt/2 using second order steps. 
-        obj.theta_mid = obj.performFirstOrderStep(theta_init, u_init, w_init, 0, ddt);
+        % t = dt/2 using second order steps.        
+        obj.theta_mid = obj.performFirstOrderStep(theta_init, u_init, w_init, 0, ddt/2);
+
+        
+        [rhoP, rhoS] = obj.coreObj.transform2rho(theta_init, 0);
+        rhoH    = rhoS - rhoP;
+        [I, J] = obj.calcCollisionIntegral( rhoP, rhoH, u);
+        obj.I_prev = I;
+        obj.J_prev = J;
+        
+        
         theta_temp = theta;
         u_temp = u;
 
@@ -116,6 +129,8 @@ methods (Access = protected)
         end
 
         obj.theta_mid = theta_temp;
+        obj.I_prev = I;
+        obj.J_prev = J;
     end
       
 
@@ -134,22 +149,33 @@ methods (Access = protected)
         % =================================================================
         
         
-        % Split step
-        [I, J] = obj.calcCollisionIntegral( t, theta_prev, u_prev);
+        [rhoP, rhoS] = obj.coreObj.transform2rho(theta_prev, t);
+        rhoH    = rhoS - rhoP;
         
-        u_next = J*dt + u_prev;
-        theta_prev = I*dt + theta_prev;
+        % Split step
+        [I, J] = obj.calcCollisionIntegral( rhoP, rhoH, u_prev);
+
+        
+        rhoP = rhoP + 0.5*dt*(3*I - obj.I_prev);
+        u_next  = u_prev + 0.5*dt*(3*J - obj.J_prev) + obj.gamma*dt;
+        
+        obj.I_prev = I;
+        obj.J_prev = J;
+        
+
+        theta_prev = obj.coreObj.transform2theta(rhoP, t);
         
         % First, calculate theta(t+dt) using the midpoint filling theta(t+dt/2)
         theta_next = step2(obj, obj.theta_mid, theta_prev, t, dt);
+                
 
-        
+
         % Perform another step with newly calculated theta as midpoint, in
         % order to calculate the midpoint filling for the next step.
         % I.e. calculate theta(t+dt+dt/2) using theta(t+dt) as midpoint.
         obj.theta_mid  = step2(obj, theta_next, obj.theta_mid, t+dt/2, dt);
         
-        
+
         function theta_next = step2(obj, theta_mid, theta_prev, t, dt)
             % Estimate x' and rapid' using midpoint filling
             [v_eff, a_eff] = obj.coreObj.calcEffectiveVelocities(theta_mid, t+dt/2, obj.x_grid, obj.rapid_grid, obj.type_grid);
@@ -258,7 +284,6 @@ methods (Access = private)
         if ~cubicflag
             IM = sparse(IM);
         end
-
 
     end
     
