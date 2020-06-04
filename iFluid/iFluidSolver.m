@@ -112,16 +112,16 @@ methods (Access = public)
         
         u_t             = cell(1, Nsteps+1);
         u_init          = iFluidTensor( repmat( obj.x_grid, obj.N, 1, obj.Ntypes) );
-        u_t{1}          = u_init;
 
         w_t             = cell(1, Nsteps+1);
         w_init          = iFluidTensor( repmat( obj.rapid_grid, 1, obj.M, obj.Ntypes) );
-        w_t{1}          = w_init;
 
         % Initializes the propagation, calculating and internally storing
         % any additional quantities needed for the step-function.
         [theta, u, w]   = obj.initialize(theta_init, u_init, w_init, t_array);
-
+        u_t{1}          = u;
+        w_t{1}          = w;
+        
         % initialize progress bar
         cpb = ConsoleProgressBar();                 % create instance
         initialize_progbar;                         % initialize progress bar with standard parameters

@@ -131,8 +131,14 @@ methods (Access = public)
             mu_old      = obj.couplings{1,1};
             mu_fit      = @(t,x) mu0 - V_ext(t,x);
             obj.couplings{1,1} = mu_fit;
+            
+            ebare   = obj.getBareEnergy(0, obj.x_grid, obj.rapid_grid, obj.type_grid);
+            if isa(T, 'function_handle')
+                T       = T(obj.x_grid);
+            end
 
-            e_eff = obj.calcEffectiveEnergy(T, 0, obj.x_grid, obj.rapid_grid);
+            w       = ebare./T;
+            e_eff   = obj.calcEffectiveEnergy(w, 0, obj.x_grid);
             theta = obj.calcFillingFraction(e_eff);
 
             obj.couplings{1,1} = mu_old;
@@ -211,33 +217,6 @@ methods (Access = public)
         
         a_eff_c = a_eff_c./dp_dr;
         a_eff   = a_eff_c + a_eff_mu;
-    end
-    
-    
-    function a_eff = calcAccTest(obj, rho, t)               
-%         ct      = obj.couplings{1,2}(t,0);
-%         c0      = obj.couplings{1,2}(0,0);
-%         
-%         if ct > 0.2*c0
-%             dp      = obj.getMomentumRapidDeriv(t, obj.x_grid, obj.rapid_grid, obj.type_grid);
-%             kernel  = 1/(2*pi) * obj.getScatteringRapidDeriv(t, obj.x_grid, obj.rapid_grid, obj.rapid_aux, obj.type_grid, obj.type_aux); 
-%             
-%             rhoS    = dp/(2*pi) - kernel*(obj.rapid_w.*rho);
-%             theta   = rho./rhoS;
-% 
-%             [~, a_eff]  = obj.calcEffectiveVelocities(theta, t);
-%         else
-%             dT      = obj.getScatteringCouplingDeriv(2, t, obj.x_grid, obj.rapid_grid, obj.rapid_aux, obj.type_grid, obj.type_aux);
-%             a_eff   = obj.couplings{2,2}(t,obj.x_grid).*(dT.*transpose(obj.rapid_w))*rho;
-%         end
-
-        dT      = 2*(obj.rapid_grid-obj.rapid_aux)./( (obj.rapid_grid-obj.rapid_aux).^2 + obj.couplings{1,2}(t,obj.x_grid).^2 );
-        dT      = iFluidTensor(dT);
-%         dT      = obj.getScatteringCouplingDeriv(2, t, obj.x_grid, obj.rapid_grid, obj.rapid_aux, obj.type_grid, obj.type_aux);
-        a_eff   = obj.couplings{2,2}(t,obj.x_grid).*(dT.*transpose(obj.rapid_w))*rho;
-        
-        
-        a_eff = obj.couplings{3,1}(t,obj.x_grid) + a_eff; 
     end
     
     
@@ -358,6 +337,16 @@ methods (Access = public)
             B{i} = 1/i*transpose(theta)*(obj.rapid_w.*b{2*i - 1 + 2 });
         end
     end
+    
+    
+    function P = calcExctProb(obj, t, x, k, q)
+        zeta = 0.5;
+        c = obj.couplings{1,2}(t,x);
+        P = zeta*k.*q.*c.^2 ./(k.^2 .* q.^2 + 0.25*c.^2 .* (k + q).^2);
+        
+        P(isnan(P)) = 0; 
+    end
+    
     
       
 end % end public methods

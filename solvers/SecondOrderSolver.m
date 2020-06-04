@@ -43,7 +43,7 @@ methods (Access = protected)
         % Calculate first theta_mid at t = dt/10/2 using first order
         % step, then use that to calculate the actual theta_mid at
         % t = dt/2 using second order steps. 
-        obj.theta_mid = obj.performFirstOrderStep(theta_init, u_init, w_init, 0, ddt);
+        obj.theta_mid = obj.performFirstOrderStep(theta_init, u_init, w_init, 0, ddt/2);
         theta_temp = theta;
 
         for i = 1:10

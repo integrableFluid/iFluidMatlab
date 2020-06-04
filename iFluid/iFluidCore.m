@@ -385,8 +385,15 @@ methods (Access = public)
             obj.setCouplings(TBA_couplings);
         end
             
-        e_eff = obj.calcEffectiveEnergy(T, 0, obj.x_grid, obj.rapid_grid);
-        theta = obj.calcFillingFraction(e_eff);
+        ebare   = obj.getBareEnergy(0, obj.x_grid, obj.rapid_grid, obj.type_grid);
+        if isa(T, 'function_handle')
+            T       = T(obj.x_grid);
+        end
+        
+        w       = ebare./T;
+        
+        e_eff   = obj.calcEffectiveEnergy(w, 0, obj.x_grid);
+        theta   = obj.calcFillingFraction(e_eff);
         
         if nargin == 3
             % Return to old couplings
@@ -497,7 +504,7 @@ methods (Access = public)
     end
     
     
-    function e_eff = calcEffectiveEnergy(obj, T, t, x, rapid)
+    function e_eff = calcEffectiveEnergy(obj, w, t, x)
         % =================================================================
         % Purpose : Calculates pseudo-energy of thermal state.
         % Input :   T     -- Temperature
@@ -507,13 +514,8 @@ methods (Access = public)
         %           type  -- quasiparticle type (can be scalar or vector)
         % Output:   e_eff -- Pesudo-energy of thermal state 
         % =================================================================
-        ebare       = obj.getBareEnergy(t, x, obj.rapid_grid, obj.type_grid); 
         kernel      = 1/(2*pi)*obj.getScatteringRapidDeriv(t, x, obj.rapid_grid, obj.rapid_aux, obj.type_grid, obj.type_aux );
-        
-        if isa(T, 'function_handle')
-            T = T(x);
-        end
-        
+                
         e_eff       = iFluidTensor(obj.N, obj.M, obj.Ntypes);
         e_eff_old   = iFluidTensor(obj.N, obj.M, obj.Ntypes);
         error_rel   = 1;
@@ -526,7 +528,7 @@ methods (Access = public)
             
             % calculate epsilon(k) from integral equation using epsilonk_old
             % i.e. update epsilon^[n] via epsilon^[n-1]            
-            e_eff       = ebare./T - kernel*(obj.rapid_w .* obj.getFreeEnergy(e_eff_old));
+            e_eff       = w - kernel*(obj.rapid_w .* obj.getFreeEnergy(e_eff_old));
             
             % calculate error
             v1          = flatten(e_eff);

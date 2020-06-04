@@ -176,7 +176,7 @@ methods (Access = public)
                     U           = Id + kernel.*transpose( obj.rapid_w.*theta_t{ti}.getX(xi) ); % CHANGED SIGN
 
                     vec         = rhoS_t{ti}.getX(xi) .* f_tx;
-                    Ymat        = Id.*transpose(1 + 2*pi*dx*IM_u.*vec) - 2*pi*dx*IM_u.*inv(U).*transpose(vec); % vec should be transposed for consistency!!
+                    Ymat        = Id.*(1 + 2*pi*dx*IM_u.*vec) - 2*pi*dx*IM_u.*inv(U).*transpose(vec); % vec should be transposed for consistency!!
                     
                     Delta       = Ymat\(2*pi*IM_u.*(W1+W2+W3)); % Solve integral equation through iteration
                     
