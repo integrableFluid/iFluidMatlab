@@ -165,6 +165,7 @@ end % end public methods
 methods (Access = private)
     
     function Hk = calcH(obj, k, t, theta )
+        % Supporting function for calcVertexExpval()
         eps     = obj.calcEps( k, t, theta, -1);
         Hk      = ( 1 + 2*sin(pi*obj.couplings{1,1}(t,obj.x_grid)*(2*k + 1))/pi .* sum( double(obj.rapid_w.*eps.*theta.*exp(obj.rapid_grid)) , 1 ) );
     end

@@ -1,9 +1,12 @@
 classdef CollisionSolver < iFluidSolver
     
+% Solves GHD equation with collision integral
+% Currently only works for two-component Lieb-Liniger model
+    
 properties (Access = protected)
     theta_mid = []; % Midpoint filling required for taking 2nd order step
     
-    I_prev = [];
+    I_prev = []; 
     J_prev = [];
     
     lperp = [];
@@ -53,7 +56,15 @@ methods (Access = public)
     
     
     function [I, J] = calcCollisionIntegral(obj, rhoP, rhoH, nu)
-
+        % =================================================================
+        % Purpose : Calculate collision integral in LL model
+        % Input :   rhoP -- root density (iFluidTensor)
+        %           rhoH -- density of holes (iFluidTensor)
+        %           nu   -- excistation probability (scalar)
+        % Output:   I    -- quasi-particle collision integral
+        %           J    -- excitation "collision integral"
+        % =================================================================
+        
         % calculate rho_p and rho_h on collision grids        
         rhoP_m = obj.interp2map( rhoP, obj.gridmap_m);
         rhoP_p = obj.interp2map( rhoP, obj.gridmap_p);
@@ -76,7 +87,8 @@ methods (Access = public)
         
         Jint    = (obj.P1/(2*Nat)).*( rhoP.*rhoP.t().*rhoH_m.*rhoH_m.t() - ...
                                       rhoH.*rhoH.t().*rhoP_m.*rhoP_m.t().*nu);
-                                   
+        
+        % integrate over all rapidities and space
         J       = sum(Jint.*permute(obj.rapid_w, [4 2 3 1]), 4);
         J       = sum( dx*sum(J.*obj.rapid_w,1), 2, 'd');
         
@@ -104,7 +116,7 @@ methods (Access = protected)
         dt      = t_array(2) - t_array(1);
         ddt     = dt/2/10;
         theta   = theta_init;
-        u       = 0;
+        u       = 0;          % u is excitation probability in this solver
         w       = w_init;
 
         % Calculate first theta_mid at t = dt/10/2 using first order
@@ -112,17 +124,17 @@ methods (Access = protected)
         % t = dt/2 using second order steps.        
         obj.theta_mid = obj.performFirstOrderStep(theta_init, u_init, w_init, 0, ddt/2);
 
+        % Set up collision integrals for propagation
+        [rhoP, rhoS]= obj.coreObj.transform2rho(theta_init, 0);
+        rhoH        = rhoS - rhoP;
+        [I, J]      = obj.calcCollisionIntegral( rhoP, rhoH, u);
+        obj.I_prev  = I;
+        obj.J_prev  = J;
         
-        [rhoP, rhoS] = obj.coreObj.transform2rho(theta_init, 0);
-        rhoH    = rhoS - rhoP;
-        [I, J] = obj.calcCollisionIntegral( rhoP, rhoH, u);
-        obj.I_prev = I;
-        obj.J_prev = J;
         
+        theta_temp  = theta;
+        u_temp      = u;
         
-        theta_temp = theta;
-        u_temp = u;
-
         for i = 1:10
             t           = (i-1)*ddt;
             [theta_temp, u_temp] = obj.step(theta_temp, u_temp, w_init, t, ddt);
@@ -136,7 +148,7 @@ methods (Access = protected)
 
     function [theta_next, u_next, w_next] = step(obj, theta_prev, u_prev, w_next, t, dt)
         % =================================================================
-        % Purpose : Performs a single, first-order Euler step propagating
+        % Purpose : Performs a split step propagating
         %           the filling function theta(t) --> theta(t+dt).
         % Input :   theta_prev -- Filling function at time t.
         %           u_prev     -- Position characteristic at time t.
@@ -148,26 +160,22 @@ methods (Access = protected)
         %           w_next     -- Rapidity characteristic at time t+dt.
         % =================================================================
         
-        
-        [rhoP, rhoS] = obj.coreObj.transform2rho(theta_prev, t);
-        rhoH    = rhoS - rhoP;
-        
-        % Split step
-        [I, J] = obj.calcCollisionIntegral( rhoP, rhoH, u_prev);
+        % Calculate collision integral
+        [rhoP, rhoS]= obj.coreObj.transform2rho(theta_prev, t);
+        rhoH        = rhoS - rhoP;
+        [I, J]      = obj.calcCollisionIntegral( rhoP, rhoH, u_prev);
 
+        % First part of split step: solve collision equation
+        rhoP        = rhoP + 0.5*dt*(3*I - obj.I_prev);
+        u_next      = u_prev + 0.5*dt*(3*J - obj.J_prev) + obj.gamma*dt;
         
-        rhoP = rhoP + 0.5*dt*(3*I - obj.I_prev);
-        u_next  = u_prev + 0.5*dt*(3*J - obj.J_prev) + obj.gamma*dt;
+        obj.I_prev  = I;
+        obj.J_prev  = J;
         
-        obj.I_prev = I;
-        obj.J_prev = J;
+        theta_prev  = obj.coreObj.transform2theta(rhoP, t);
         
-
-        theta_prev = obj.coreObj.transform2theta(rhoP, t);
-        
-        % First, calculate theta(t+dt) using the midpoint filling theta(t+dt/2)
+        % Second part of split step: solve propagation equation
         theta_next = step2(obj, obj.theta_mid, theta_prev, t, dt);
-                
 
 
         % Perform another step with newly calculated theta as midpoint, in
@@ -205,10 +213,17 @@ end % end protected methods
 methods (Access = private)
     
     function Qint = interp2map(obj, Q, map)
-        % Q exist on rapid_grid
-        Q = double(Q);
-        M = size(Q, 2);
+        % =================================================================
+        % Purpose : Takes a quantity Q defined on rapidity grid and
+        %           maps it to another grid via matrix multiplication.
+        % Input :   Q       -- Quantity on rapidity grid.
+        %           map     -- (N^2 , N) matrix encoding interpolation.
+        % Output:   Qint    -- Quantity on new grid.
+        % =================================================================
         
+        Q       = double(Q);
+        M       = size(Q, 2);
+
         Q_int = zeros(obj.N, obj.N, M);
         
         for i = 1:M
@@ -219,14 +234,24 @@ methods (Access = private)
         Qint = iFluidTensor(permute(Q_int, [1 3 4 2]));
     end
     
-    function IM = calcInterpolationMap( obj, grid, array , cubicflag)
-        N1 = length(grid);
-        N2 = length(array);
+    
+    function IM = calcInterpolationMap( obj, grid_from, grid_to , cubicflag)
+        % =================================================================
+        % Purpose : Create map between two grids 
+        % Input :   grid_from   -- Old grid.
+        %           grid_to     -- New grid.
+        %           cubicflag   -- if 1, use cubic splines, else linear
+        %                           splines + sparse matrix.
+        % Output:   IM           -- Matrix encoding the mapping.
+        % =================================================================
+        
+        N1 = length(grid_from);
+        N2 = length(grid_to);
 
         IM = zeros(N2,N1);   
 
 
-        h = diff(grid);
+        h = diff(grid_from);
         h(end+1) = h(end);
 
         % Compute "Hessian" matrix
@@ -253,7 +278,7 @@ methods (Access = private)
         for i = 1:N2
             S = cubicflag;
 
-            [ ~, ix ] = min( abs( grid-array(i) ) );
+            [ ~, ix ] = min( abs( grid_from-grid_to(i) ) );
 
             if ix == 1 % extrapolation
                 ix = ix+1;
@@ -263,13 +288,13 @@ methods (Access = private)
                 S = 0;
             end
 
-            if grid(ix) < array(i) % align between gridpoints x_{i-1} and x_{i}
+            if grid_from(ix) < grid_to(i) % align between gridpoints x_{i-1} and x_{i}
                 ix = ix+1;
             end
 
 
-            dx1 = grid(ix) - array(i);
-            dx2 = array(i) - grid(ix-1);
+            dx1 = grid_from(ix) - grid_to(i);
+            dx2 = grid_to(i) - grid_from(ix-1);
 
             IM(i,ix-1) = dx1/h(ix);
             IM(i,ix) = 1-dx1/h(ix);
