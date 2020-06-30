@@ -60,7 +60,7 @@ methods (Access = public)
     
     
     function dT = getScatteringRapidDeriv(obj, t, x, rapid1, rapid2, type1, type2)
-        dT      = -2*obj.couplings{1,2}(t,x)./( (rapid1-rapid2).^2 + obj.couplings{1,2}(t,x).^2 );
+        dT      = -2*obj.couplings{1,2}(t,x)./( (rapid1-rapid2).^2 + obj.couplings{1,2}(t,x).^2 ); 
         
         dT(isnan(dT)) = 0; % removes any NaN
         
@@ -84,7 +84,7 @@ methods (Access = public)
     
     function dT = getScatteringCouplingDeriv(obj, coupIdx, t, x, rapid1, rapid2, type1, type2)
         if coupIdx == 2
-            dT = 2*(rapid1-rapid2)./( (rapid1-rapid2).^2 + + obj.couplings{1,2}(t,x).^2 );
+            dT = 2*(rapid1-rapid2)./( (rapid1-rapid2).^2 + obj.couplings{1,2}(t,x).^2 );
         else
             dT = 0;
         end
@@ -131,8 +131,14 @@ methods (Access = public)
             mu_old      = obj.couplings{1,1};
             mu_fit      = @(t,x) mu0 - V_ext(t,x);
             obj.couplings{1,1} = mu_fit;
+            
+            ebare   = obj.getBareEnergy(0, obj.x_grid, obj.rapid_grid, obj.type_grid);
+            if isa(T, 'function_handle')
+                T       = T(obj.x_grid);
+            end
 
-            e_eff = obj.calcEffectiveEnergy(T, 0, obj.x_grid, obj.rapid_grid);
+            w       = ebare./T;
+            e_eff   = obj.calcEffectiveEnergy(w, 0, obj.x_grid);
             theta = obj.calcFillingFraction(e_eff);
 
             obj.couplings{1,1} = mu_old;
@@ -147,7 +153,7 @@ methods (Access = public)
             Natoms_fit      = trapz(obj.x_grid, density);
         end % end nested function
     end
-
+    
 
     function [v_eff, a_eff] = calcEffectiveVelocities(obj, theta, t, x, rapid, type)        
         % =================================================================
@@ -161,6 +167,12 @@ methods (Access = public)
         % Output:   v_eff -- Effective velocity (iFluidTensor)
         %           a_eff -- Effective acceleration (iFluidTensor)
         % =================================================================
+        if nargin == 3
+            x       = obj.x_grid;
+            rapid   = obj.rapid_grid;
+            type    = obj.type_grid;
+        end
+        
         de_dr   = obj.applyDressing(obj.getEnergyRapidDeriv(t, x, rapid, type), theta, t);
         dp_dr   = obj.applyDressing(obj.getMomentumRapidDeriv(t, x, rapid, type), theta, t);
         
@@ -228,7 +240,7 @@ methods (Access = public)
                 t       = t_array(k);
             end
             
-            D       = obj.calcCharges(0, theta_k, t); % density
+            D       = obj.calcCharges(0, theta_k, t)'; % density
             prefac  = factorial(n)^2 * (obj.couplings{1,2}(t,obj.x_grid)).^n / 2^n ./ D.^n;
         
             % Find integers m_j to sum over
@@ -325,6 +337,16 @@ methods (Access = public)
             B{i} = 1/i*transpose(theta)*(obj.rapid_w.*b{2*i - 1 + 2 });
         end
     end
+    
+    
+    function P = calcExctProb(obj, t, x, k, q)
+        zeta = 0.5;
+        c = obj.couplings{1,2}(t,x);
+        P = zeta*k.*q.*c.^2 ./(k.^2 .* q.^2 + 0.25*c.^2 .* (k + q).^2);
+        
+        P(isnan(P)) = 0; 
+    end
+    
     
       
 end % end public methods

@@ -54,7 +54,7 @@ properties (Access = protected)
     
     % Optional parameters (default values specified here). 
     tolerance       = 1e-6;     % Tolerance for TBA solution
-    maxcount        = 100;      % Max interations for TBA solution
+    maxcount        = 1000;      % Max interations for TBA solution
     homoEvol        = false;    % Homogeneous evolution
 
 end % end protected properties
@@ -220,7 +220,13 @@ methods (Access = public)
         % Output:   rho     -- root density (cell array of iFluidTensor)
         %           rhoS    -- density of states (cell array of iFluidTensor)
         % =================================================================   
-        Nsteps  = length(theta); % number of time steps
+        
+        if iscell(theta)
+            Nsteps = length(theta); % number of time steps
+        else
+            Nsteps = 1;
+        end
+        
         rho     = cell(1,Nsteps);
         rhoS    = cell(1,Nsteps);
         for n = 1:Nsteps % Transform for each time step
@@ -259,7 +265,13 @@ methods (Access = public)
         % Output:   theta   -- filling function (cell array of iFluidTensor)
         %           rhoS    -- density of states (cell array of iFluidTensor)
         % =================================================================
-        Nsteps  = length(rho); % number of time steps
+        
+        if iscell(rho)
+            Nsteps = length(rho); % number of time steps
+        else
+            Nsteps = 1;
+        end
+        
         theta   = cell(1,Nsteps);
         rhoS    = cell(1,Nsteps);
         for n = 1:Nsteps % Transform for each time step
@@ -289,15 +301,18 @@ methods (Access = public)
     end
     
 
-    function [q, j] = calcCharges(obj, c_idx, theta, t_array)
+    function [q, j, Vq, Vj] = calcCharges(obj, c_idx, theta, t_array, calcV)
         % =================================================================
         % Purpose : Calculates expectation values of charge densities and
         %           associated currents.
         % Input :   c_idx   -- charge indices
         %           theta   -- filling function (cell array of iFluidTensor)
         %           t_array -- array of times corresponding to theta
+        %           calcV   -- (optional) if true, calc form factors
         % Output:   q       -- charge exp. vals for each t in t_array
         %           j       -- current exp. vals for each t in t_array
+        %           Vq      -- one-particle charge form factors
+        %           Vq      -- one-particle current form factors
         % ================================================================= 
         if iscell(theta)
             Nsteps = length(theta); % number of time steps
@@ -305,9 +320,15 @@ methods (Access = public)
             Nsteps = 1;
         end
         
+        if nargin < 5
+            calcV = false;
+        end
+        
         Ncharg  = length(c_idx); 
         q       = zeros(obj.M, Nsteps, Ncharg);
         j       = zeros(obj.M, Nsteps, Ncharg);
+        Vq      = cell(Nsteps, Ncharg);
+        Vj      = cell(Nsteps, Ncharg);
     
         for i = 1:Nsteps
             if Nsteps == 1
@@ -324,13 +345,22 @@ methods (Access = public)
             
             dp      = obj.getMomentumRapidDeriv(t, obj.x_grid, obj.rapid_grid, obj.type_grid);
             dE      = obj.getEnergyRapidDeriv(t, obj.x_grid, obj.rapid_grid, obj.type_grid);
+            
+            if calcV
+                v_eff = obj.calcEffectiveVelocities(theta_i, t, obj.x_grid, obj.rapid_grid, obj.type_grid);
+            end
 
             for n = 1:Ncharg
                 hn          = obj.getOneParticleEV( c_idx(n), t, obj.x_grid, obj.rapid_grid);               
                 hn_dr       = obj.applyDressing(hn, theta_i, t);
                 
                 q(:,i,n)    = 1/(2*pi) * squeeze(sum( obj.rapid_w .* sum( double(dp.*theta_i.*hn_dr) , 3) , 1));
-                j(:,i,n)    = 1/(2*pi) * squeeze(sum( obj.rapid_w .* sum( double(dE.*theta_i.*hn_dr) , 3) , 1)); 
+                j(:,i,n)    = 1/(2*pi) * squeeze(sum( obj.rapid_w .* sum( double(dE.*theta_i.*hn_dr) , 3) , 1));
+                
+                if calcV
+                    Vq{i,n} = hn_dr;
+                    Vj{i,n} = v_eff.*hn_dr;
+                end
             end
         end
     end
@@ -355,8 +385,15 @@ methods (Access = public)
             obj.setCouplings(TBA_couplings);
         end
             
-        e_eff = obj.calcEffectiveEnergy(T, 0, obj.x_grid, obj.rapid_grid);
-        theta = obj.calcFillingFraction(e_eff);
+        ebare   = obj.getBareEnergy(0, obj.x_grid, obj.rapid_grid, obj.type_grid);
+        if isa(T, 'function_handle')
+            T       = T(obj.x_grid);
+        end
+        
+        w       = ebare./T;
+        
+        e_eff   = obj.calcEffectiveEnergy(w, 0, obj.x_grid);
+        theta   = obj.calcFillingFraction(e_eff);
         
         if nargin == 3
             % Return to old couplings
@@ -377,6 +414,12 @@ methods (Access = public)
         % Output:   v_eff -- Effective velocity (iFluidTensor)
         %           a_eff -- Effective acceleration (iFluidTensor)
         % =================================================================
+        if nargin == 3
+            x       = obj.x_grid;
+            rapid   = obj.rapid_grid;
+            type    = obj.type_grid;
+        end
+        
         de_dr   = obj.applyDressing(obj.getEnergyRapidDeriv(t, x, rapid, type), theta, t);
         dp_dr   = obj.applyDressing(obj.getMomentumRapidDeriv(t, x, rapid, type), theta, t);
         
@@ -434,10 +477,9 @@ methods (Access = public)
         % Calculate dressing operator
         kernel  = 1/(2*pi)*obj.getScatteringRapidDeriv(t, obj.x_grid, obj.rapid_grid, obj.rapid_aux, obj.type_grid, obj.type_aux);
         
-        I       = iFluidTensor(obj.N, obj.M, obj.Ntypes, obj.N, obj.Ntypes);
-        I.setIdentity();
+        I       = iFluidTensor(obj.N, 1, obj.Ntypes, obj.N, obj.Ntypes, 'eye');
         
-        U       = I + kernel.*transpose(obj.rapid_w.*theta); 
+        U       = I + kernel.*transpose(obj.rapid_w.*theta);
         
         % We now have the equation Q = U*Q_dr. Therefore we solve for Q_dr
         % using the '\' operation.
@@ -462,7 +504,7 @@ methods (Access = public)
     end
     
     
-    function e_eff = calcEffectiveEnergy(obj, T, t, x, rapid)
+    function e_eff = calcEffectiveEnergy(obj, w, t, x)
         % =================================================================
         % Purpose : Calculates pseudo-energy of thermal state.
         % Input :   T     -- Temperature
@@ -472,13 +514,8 @@ methods (Access = public)
         %           type  -- quasiparticle type (can be scalar or vector)
         % Output:   e_eff -- Pesudo-energy of thermal state 
         % =================================================================
-        ebare       = obj.getBareEnergy(t, x, obj.rapid_grid, obj.type_grid); 
         kernel      = 1/(2*pi)*obj.getScatteringRapidDeriv(t, x, obj.rapid_grid, obj.rapid_aux, obj.type_grid, obj.type_aux );
-        
-        if isa(T, 'function_handle')
-            T = T(x);
-        end
-        
+                
         e_eff       = iFluidTensor(obj.N, obj.M, obj.Ntypes);
         e_eff_old   = iFluidTensor(obj.N, obj.M, obj.Ntypes);
         error_rel   = 1;
@@ -491,7 +528,7 @@ methods (Access = public)
             
             % calculate epsilon(k) from integral equation using epsilonk_old
             % i.e. update epsilon^[n] via epsilon^[n-1]            
-            e_eff       = ebare./T - kernel*(obj.rapid_w .* obj.getFreeEnergy(e_eff_old));
+            e_eff       = w - kernel*(obj.rapid_w .* obj.getFreeEnergy(e_eff_old));
             
             % calculate error
             v1          = flatten(e_eff);

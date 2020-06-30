@@ -20,6 +20,9 @@ properties (Access = public)
     t_si        = 1; % time scale
     T_si        = 1; % temperature scale
     P_si        = 1; % momentum scale
+    
+    
+    RS = 1;
 
 end % end private properties
 
@@ -37,7 +40,12 @@ methods (Access = public)
         
         % Calculate unit scales
         obj.Eg_si   = 0.5*obj.hbar_si*omega_scale; 
-        obj.Lg_si   = (sqrt(obj.m_si*omega_scale/obj.hbar_si))^(-1); 
+        obj.Lg_si   = (sqrt(obj.m_si*omega_scale/obj.hbar_si))^(-1);
+        
+%         g1D = 2*obj.hbar_si*omega_scale*obj.as_si;
+%         obj.Eg_si   = 0.5*obj.m_si*g1D^2 / obj.hbar_si^2; 
+%         obj.Lg_si   = obj.hbar_si^2 / (obj.m_si*g1D);
+        
         obj.t_si    = obj.hbar_si/obj.Eg_si; 
         obj.T_si    = obj.Eg_si/obj.kB_si;
         obj.P_si    = obj.hbar_si/obj.Lg_si;
@@ -54,7 +62,7 @@ methods (Access = public)
             case 'energy'
                 quantity_tba = quantity_si/obj.Eg_si;
             case 'rapidity'
-                quantity_tba = quantity_si*obj.Lg_si;
+                quantity_tba = quantity_si*obj.Lg_si*obj.RS;
             case 'momentum'
                 quantity_tba = quantity_si/obj.P_si;
             case 'time'
@@ -62,7 +70,11 @@ methods (Access = public)
             case 'length'
                 quantity_tba = quantity_si/obj.Lg_si;
             case 'temperature'
-                quantity_tba = quantity_si/obj.T_si;
+                if isa(quantity_si, 'function_handle')
+                    quantity_tba = @(x) quantity_si( x*obj.Lg_si )/obj.T_si;
+                else
+                    quantity_tba = quantity_si/obj.T_si;
+                end
             case 'couplings'
                 % Anonymous functions are in SI units and take SI
                 % arguments. Thus, convert arguments to SI and output to
@@ -99,13 +111,17 @@ methods (Access = public)
             case 'momentum'
                 quantity_si = quantity_tba*obj.P_si;
             case 'rapidity'
-                quantity_si = quantity_tba/obj.Lg_si;
+                quantity_si = quantity_tba/obj.Lg_si/obj.RS;
             case 'time'
                 quantity_si = quantity_tba*obj.t_si;
             case 'length'
                 quantity_si = quantity_tba*obj.Lg_si;
             case 'temperature'
-                quantity_si = quantity_tba*obj.T_si;
+                if isa(quantity_tba, 'function_handle')
+                    quantity_si = @(x) quantity_tba( x/obj.Lg_si )*obj.T_si;
+                else
+                    quantity_si = quantity_tba*obj.T_si;
+                end
             case 'couplings'
                 % Couplings
                 quantity_si{1,1} = @(t, x) quantity_tba{1,1}( t/obj.t_si, x/obj.Lg_si )*obj.Eg_si; % mu is in units of energy
@@ -191,9 +207,27 @@ methods (Access = public)
 
             % Run LLS function
             [rho, rhoS] = transform2rho@LiebLinigerModel(obj, theta, t_array);
+            
+            if iscell(rho)
+                rho = cellfun(@(x) x*obj.RS,rho,'un',0);
+                rhoS = cellfun(@(x) x*obj.RS,rhoS,'un',0);
+            else
+                rhoS = obj.RS*rhoS;
+                rho = obj.RS*rho;
+            end
+            
         else
             % Run LLS function
             [rho, rhoS] = transform2rho@LiebLinigerModel(obj, theta);
+            
+            if iscell(rho)
+                rho = cellfun(@(x) x*obj.RS,rho,'un',0);
+                rhoS = cellfun(@(x) x*obj.RS,rhoS,'un',0);
+            else
+                rhoS = obj.RS*rhoS;
+                rho = obj.RS*rho;
+            end
+            
         end
     end
     
@@ -209,19 +243,33 @@ methods (Access = public)
 
             % Run LLS function
             [theta, rhoS] = transform2theta@LiebLinigerModel(obj, rho, t_array);
+            
+            if iscell(rhoS)
+                rhoS = cellfun(@(x) x*obj.RS,rhoS,'un',0);
+            else
+                rhoS = obj.RS*rhoS;
+            end
+            
         else
             % Run LLS function
             [theta, rhoS] = transform2theta@LiebLinigerModel(obj, rho);
+            
+            if iscell(rhoS)
+                rhoS = cellfun(@(x) x*obj.RS,rhoS,'un',0);
+            else
+                rhoS = obj.RS*rhoS;
+            end
+            
         end
     end
     
     
-    function [q, j] = calcCharges(obj, theta, c_idx, t_array)
+    function [q, j] = calcCharges(obj, c_idx, theta, t_array)
         % Convert SI --> TBA
         t_array = obj.convert2TBA(t_array, 'time');
         
         % Run LLS function
-        [q, j] = calcCharges@LiebLinigerModel(obj, theta, c_idx, t_array);
+        [q, j] = calcCharges@LiebLinigerModel(obj, c_idx, theta, t_array);
         
         % Convert TBA --> SI
         % NOTE: Doesn't convert currents
@@ -250,6 +298,7 @@ methods (Access = public)
         T = obj.convert2TBA(T, 'temperature');
         
         if nargin == 3
+            % Convert SI --> TBA
             TBA_couplings   = obj.convert2TBA(TBA_couplings, 'couplings');
             [theta, e_eff]  = calcThermalState@LiebLinigerModel(obj, T, TBA_couplings);
         else
@@ -257,6 +306,118 @@ methods (Access = public)
         end
     end
     
+    
+    function g_n = calcLocalCorrelator(obj, n, theta, t_array)
+        % Convert SI --> TBA
+        t_array = obj.convert2TBA(t_array, 'time');
+        
+        % Calculate correlations
+        g_n = calcLocalCorrelator@LiebLinigerModel(obj, n, theta, t_array);
+        
+        % Convert TBA --> SI
+        g_n = g_n/obj.Lg_si^n;
+    end
+    
+    
+    function MDF = calcBosonicMDF(obj, nk_target)
+        % Estimate the MDF given a rapidity distribution.
+        
+        
+        k_array     = obj.convert2SI(obj.rapid_grid,'rapidity');
+        
+        % find peaks of rapidity disitribtions
+        peak_idx    = find(islocalmax(nk_target));
+        
+        % remove false peaks around edges
+        edge        = ceil(obj.N/10); % edges are 10% of points on either side
+        peak_idx    = peak_idx( peak_idx>edge & peak_idx<(obj.N-edge) );
+        
+        peak_k      = k_array(peak_idx)';
+        Npeaks      = length(peak_idx);
+   
+        
+        % save couplings and grids. use x_grid of length 1 for speed
+        dens_total  = trapz(k_array, nk_target); % N atoms in region
+        mu_old      = obj.couplings{1,1};
+        x_old       = obj.x_grid;
+        
+        obj.x_grid = 0;
+        obj.M = 1;
+
+        % find effective temperature assuming rapidity distribution is
+        % close to a thermal state
+        cost        = @(x) sum(( nk_target - sum(calcMultipeakProfile(obj, x(1:Npeaks), x(end), peak_idx),2) ).^2);
+        x_guess     = [0.5*mu_old(0,0) * ones(1,Npeaks) , 100e-9];
+%         options     = optimset('Display','iter');
+        options     = optimset('Display','none');
+        fit_res     = fminsearch(cost, x_guess, options);
+
+        
+        % from effective temperature and densities of peaks, estimate MDF
+        [nk_fit,dens_fit]= calcMultipeakProfile(obj, fit_res(1:Npeaks), fit_res(end), peak_idx);        
+        lambda      = 2*2*obj.hbar_si^2 * dens_fit./(obj.m_si*obj.kB_si*fit_res(end)); % NOTE: there is an extra factor 2 here. why? because it works.
+        MDF         = lambda.^(-1) ./ (lambda.^(-2) + (k_array-peak_k).^2);
+        
+        % normalize MDF to norm of nk_target
+        MDF         = dens_total*MDF / trapz(k_array, sum(MDF,2), 1);
+        MDF         = sum(MDF,2);
+        
+        % return to old couplings
+        obj.couplings{1,1} = mu_old;
+        obj.x_grid = x_old;
+        obj.M = length(x_old);
+        
+%         % plot for testing
+%         figure
+%         
+%         subplot(2,1,1)
+%         hold on
+%         box on
+% %         plot( k_array*1e-6, nk_fit.*dens_total *1e6 )
+%         plot( k_array*1e-6, nk_fit *1e6 )
+%         plot( k_array*1e-6, nk_target*1e6, 'k')
+%         plot( k_array*1e-6, sum(nk_fit,2)*1e6, 'm:')
+%         
+%         legend('\rho = ' + string(dens_fit*1e-6))
+%         
+%         subplot(2,1,2)
+%         hold on
+%         box on
+%         plot( k_array*1e-6, MDF *1e6 )
+%         plot( k_array*1e-6, sum(MDF,2) *1e6, 'm:' )
+%         
+%         legend('\lambda = ' + string(lambda*1e6))
+%         
+%         sgtitle(['T_{fit} = ' num2str(fit_res(end)*1e9) 'nK'])
+        
+        
+        function [nk_peaks, dens_peak] = calcMultipeakProfile(obj, mu, T, peak_idx)
+            nk_peaks = zeros(obj.N, length(peak_idx));
+            dens_peak= zeros(1    , length(peak_idx));
+
+            for i = 1:length(peak_idx) % number of peaks
+                obj.couplings{1,1} = @(t,x) mu(i);
+
+                theta   = obj.calcThermalState(T);
+                rho     = obj.transform2rho(theta);
+                
+                shift   = floor(peak_idx(i)-obj.N/2);
+                rho     = circshift(double(rho), shift );
+                if shift > 0 % rho shifted right
+                    % pad left side
+                    rho(1:shift) = 0;
+                elseif shift < 0 % rho shifted left
+                    % pad right side
+                    rho(obj.N+1+shift:end) = 0;
+                end
+
+                nk_peaks(:,i)   = rho;
+                dens_peak(i)    = trapz(obj.convert2SI(obj.rapid_grid,'rapidity'), rho);
+            end
+
+        end % end nested function
+    
+    end
     
 end % end public methods
 

@@ -43,7 +43,7 @@ methods (Access = protected)
         % Calculate first theta_mid at t = dt/10/2 using first order
         % step, then use that to calculate the actual theta_mid at
         % t = dt/2 using second order steps. 
-        obj.theta_mid = obj.performFirstOrderStep(theta_init, u_init, w_init, 0, ddt);
+        obj.theta_mid = obj.performFirstOrderStep(theta_init, u_init, w_init, 0, ddt/2);
         theta_temp = theta;
 
         for i = 1:10
@@ -95,9 +95,15 @@ methods (Access = protected)
 
             % Use interpolation to find theta_prev at x_back, r_back and
             % assign values to theta_next.
-            theta_next = obj.interpPhaseSpace(theta_prev, r_back, x_back, obj.extrapFlag); 
-            u_next     = obj.interpPhaseSpace(u_prev, r_back, x_back, true); % always extrapolate u
-            w_next     = obj.interpPhaseSpace(w_prev, r_back, x_back, true); % always extrapolate u
+            theta_next = obj.interpPhaseSpace(theta_prev, r_back, x_back, obj.extrapFlag);
+            
+            if obj.calcCharac
+                u_next  = obj.interpPhaseSpace(u_prev, r_back, x_back, true); % always extrapolate u
+                w_next  = obj.interpPhaseSpace(w_prev, r_back, x_back, true); % always extrapolate w
+            else
+                u_next  = u_prev;
+                w_next  = w_prev;
+            end
         end % end nested function
     end
     

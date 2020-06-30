@@ -106,58 +106,81 @@ methods (Access = public)
     end
     
     
-    function Psi_k_t = calcVertexExpval( obj, kmax, theta_t, t_array)
+    function [Psi, V_Psi] = calcVertexExpval( obj, kmax, theta_t, t_array, calcV)
         % =================================================================
         % Purpose : Calculates expectation value of local vertex operator
         %           for k = 1 to kmax
         % Input :   kamx    -- max order of expval calculated
         %           theta_t -- filling function (cell array of iFluidTensor)
         %           t_array -- array of times corresponding to theta
-        % Output:   Psi_k_t -- Cell array of expectation values for each
-        %                      time sgiven in t_array 
+        %           calcV   -- if true, calc V
+        % Output:   Psi     -- vertex expactation values
+        %           V_Psi   -- corresponding V-field 
         % =================================================================
-        Psi_k_t = cell(1, length(t_array));
+        
+        if nargin < 5
+            calcV = false;
+        end
+        
+        Psi = zeros( obj.M, kmax, length(t_array) );
+        V_Psi = cell(kmax, length(t_array));
+        
+        if calcV
+            [~, rhoS_t] = obj.transform2rho(theta_t, t_array);
+        end
 
         for i = 1:length(t_array)
             t       = t_array(i);
             theta   = theta_t{i};
-            Psi_mat = zeros(obj.M, kmax);
-            
-            Psi_k   = 1;
+
+            Hk      = zeros( obj.M, kmax ); 
+            Xi_m    = zeros( obj.N, obj.M, kmax );
+            Xi_p    = zeros( obj.N, obj.M, kmax );
 
             for k = 1:kmax
-                Xi      = obj.calcXi( k, t, theta );
-                Psi_k   = Psi_k .* ( 1 + 2*sin(pi*obj.couplings{1,1}(t,obj.x_grid)*(2*k + 1))/pi .* sum( double(obj.rapid_w.*Xi.*theta.*exp(obj.rapid_grid)) , 1 ) );
+                Hk(:,k) = obj.calcH(k-1, t, theta);
                 
-                Psi_mat(:,k) = squeeze(Psi_k);
+                if calcV
+                    Xi_m(:,:,k) = double( obj.calcEps(k-1, t, theta, -1) );
+                    Xi_p(:,:,k) = double( obj.calcEps(k-1, t, theta, +1) );
+                end
             end
-
-            Psi_k_t{i} = Psi_mat;
+            
+            Psi(:,:,i) = cumprod(Hk, 2);
+            
+            if calcV
+                prefac = 2*sin(pi*obj.couplings{1,1}(t,obj.x_grid)*(2*(0:kmax-1) + 1))/pi;
+                V_temp = cumsum( permute(prefac./Hk, [3 1 2]).*Xi_m.*Xi_p , 3 ).*permute(Psi(:,:,i),[3 1 2])./double(rhoS_t{i});
+                for k = 1:kmax
+                    V_Psi{k,i} = iFluidTensor( V_temp(:,:,k) );
+                end
+                
+            end
         end
     end
       
 end % end public methods
 
     
-methods (Access = private)    
-
-    function Xi = calcXi(obj, k_idx, t, theta)
+methods (Access = private)
+    
+    function Hk = calcH(obj, k, t, theta )
         % Supporting function for calcVertexExpval()
-        rapid_arg   = obj.rapid_grid - permute(obj.rapid_grid, [4 2 3 1]);
-        chi         = obj.calcChi(k_idx, t, obj.x_grid, rapid_arg);
+        eps     = obj.calcEps( k, t, theta, -1);
+        Hk      = ( 1 + 2*sin(pi*obj.couplings{1,1}(t,obj.x_grid)*(2*k + 1))/pi .* sum( double(obj.rapid_w.*eps.*theta.*exp(obj.rapid_grid)) , 1 ) );
+    end
+
+    function eps = calcEps(obj, k, t, theta, sgn)
+        % Supporting function for calcVertexExpval()
+        rapid_arg   = - (obj.rapid_grid - permute(obj.rapid_grid, [4 2 3 1]));        
+        chi         = 1/pi*imag(exp(2*k*1i*pi*obj.couplings{1,1}(t,obj.x_grid))./sinh(sign(sgn)*rapid_arg - 1i*pi*obj.couplings{1,1}(t,obj.x_grid)));
         
         X           = permute(eye(obj.N), [1 3 4 2]) - chi.*transpose(obj.rapid_w.*theta); 
-        epsi        = iFluidTensor(exp(-obj.rapid_grid));
+        epsi        = iFluidTensor(exp(sign(sgn)*obj.rapid_grid));
 
-        Xi          = X\epsi;   
+        eps         = X\epsi;   
     end
     
-
-    function chi = calcChi(obj, k, t, x, rapid)
-        % Supporting function for calcVertexExpval()
-        chi = 1i/(2*pi) * ( exp(-1i*2*k*obj.couplings{1,1}(t,x))./sinh( rapid + 1i*pi*obj.couplings{1,1}(t,x) ) ...
-                            - exp(1i*2*k*obj.couplings{1,1}(t,x))./sinh( rapid - 1i*pi*obj.couplings{1,1}(t,x) ) );
-    end
 
 end % end private methods
 
