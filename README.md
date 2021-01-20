@@ -9,6 +9,10 @@ When publishing calculations performed with iFluid, please cite the [iFluid pape
 ## Documentation
 The complete iFluid documentation can be found [here!](https://integrablefluid.github.io/iFluidDocumentation/)
 
+## Published papers using iFluid
+[SciPost Phys. 8, 041 (2020)](https://scipost.org/SciPostPhys.8.3.041)
+[SciPost Phys. Core 3, 016 (2020)](https://scipost.org/SciPostPhysCore.3.2.016)
+
 ## References
 iFluid uses the following scripts for utility purposes. They can be found in the \utils folder.
 
