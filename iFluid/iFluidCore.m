@@ -516,8 +516,8 @@ methods (Access = public)
         % =================================================================
         kernel      = 1/(2*pi)*obj.getScatteringRapidDeriv(t, x, obj.rapid_grid, obj.rapid_aux, obj.type_grid, obj.type_aux );
                 
-        e_eff       = iFluidTensor(obj.N, obj.M, obj.Ntypes);
-        e_eff_old   = iFluidTensor(obj.N, obj.M, obj.Ntypes);
+        e_eff       = iFluidTensor(obj.N, size(w,2), obj.Ntypes);
+        e_eff_old   = iFluidTensor(obj.N, size(w,2), obj.Ntypes);
         error_rel   = 1;
         count       = 0;
         
@@ -540,6 +540,53 @@ methods (Access = public)
 
             count       = count+1;
         end
+    end
+    
+    
+    function s = calcEntropyDensity(obj, theta, w, t_array)
+        
+%         if iscell(theta)
+%             Nsteps = length(theta); % number of time steps
+%         else
+%             Nsteps = 1;
+%         end
+%         
+%         if nargin < 4
+%             e_eff = obj.calcEffectiveEnergy(obj, w, 0, obj.x_grid);
+%         end
+%         
+%         s       = zeros(obj.M, Nsteps);
+%     
+%         for i = 1:Nsteps
+%             if Nsteps == 1
+%                 theta_i = theta;
+%             else
+%                 theta_i = theta{i};
+%             end
+%             
+%             if nargin < 4
+%                 t = 0;
+%             else
+%                 t = t_array(i);
+%                 e_eff = obj.calcEffectiveEnergy(w, t, obj.x_grid);
+%             end
+%             
+%             dp      = obj.getMomentumRapidDeriv(t, obj.x_grid, obj.rapid_grid, obj.type_grid);
+%             rho     = obj.transform2rho(theta_i, t);
+%             F       = obj.getFreeEnergy(e_eff);
+%             
+%             s(:,i)  = squeeze( sum(sum(obj.rapid_w.*( rho.*w - dp.*F/(2*pi) )  ,1,'d'),3) );
+%         end
+
+        [rhoP, rhoS] = obj.transform2rho(theta, t_array);
+        
+        Nsteps = length(t_array);
+        s       = zeros(obj.M, Nsteps);
+        
+        for i = 1:Nsteps
+            s(:,i) = - squeeze(sum(sum(obj.rapid_w.*rhoS{i}.*( theta{i}.*log(theta{i}) + (1-theta{i}).*log(1-theta{i}) ) ,1,'d'),3));
+        end
+
     end
     
     

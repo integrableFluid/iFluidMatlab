@@ -149,6 +149,23 @@ methods (Access = public)
     end
     
     %% Wrapper functions    
+    function [mu0_fit, nu] = fitAtomnumber3D(obj, T, V_ext, Natoms, mu0_guess, N_levels, mu_level, setCouplingFlag)        
+        % Convert SI --> TBA
+        T           = obj.convert2TBA(T, 'temperature');
+        mu0_guess   = obj.convert2TBA(mu0_guess, 'energy');
+        mu_level    = obj.convert2TBA(mu_level, 'energy');
+        if ~isempty(V_ext)
+            V_ext   = @(t, x) V_ext( t*obj.t_si, x*obj.Lg_si )/obj.Eg_si;
+        end
+        
+        % Run LLS function
+        [mu0_fit, nu] = fitAtomnumber3D@LiebLinigerModel(obj, T, V_ext, Natoms, mu0_guess, N_levels, mu_level, setCouplingFlag);
+        
+        % Convert TBA --> SI
+        mu0_fit = obj.convert2SI(mu0_fit, 'energy');
+    end
+    
+    
     function mu0_fit = fitAtomnumber(obj, T, V_ext, Natoms, mu0_guess, setCouplingFlag)        
         % Convert SI --> TBA
         T       = obj.convert2TBA(T, 'temperature');
@@ -162,6 +179,35 @@ methods (Access = public)
         
         % Convert TBA --> SI
         mu0_fit = obj.convert2SI(mu0_fit, 'energy');
+    end
+    
+    
+    function [mu0_fit, theta_fit] = fitDensity(obj, T, density_target, mu0_guess)        
+        % Convert SI --> TBA
+        T       = obj.convert2TBA(T, 'temperature');
+        mu0_guess = obj.convert2TBA(mu0_guess, 'energy');
+        density_target = obj.convert2SI(density_target, 'length');
+        
+        % Run LLS function
+        [mu0_fit, theta_fit] = fitDensity@LiebLinigerModel(obj, T, density_target, mu0_guess); 
+        
+        % Convert TBA --> SI
+        mu0_fit = obj.convert2SI(mu0_fit, 'energy');
+    end
+    
+    
+    function [x, theta_fit] = fitThermalState(obj, theta_noneq, t, x0, options)    
+        % Convert SI --> TBA
+        x0(1)   = obj.convert2TBA(x0(1), 'temperature');
+        x0(2)   = obj.convert2TBA(x0(2), 'energy');
+        t       = obj.convert2TBA(t, 'time');
+
+        % Run LLS function
+        [x, theta_fit] = fitThermalState@LiebLinigerModel(obj, theta_noneq, t, x0, options);
+        
+        % Convert TBA --> SI
+        x(1)    = obj.convert2SI(x(1), 'temperature');
+        x(2)    = obj.convert2SI(x(2) , 'energy');
     end
     
     
@@ -318,106 +364,6 @@ methods (Access = public)
         g_n = g_n/obj.Lg_si^n;
     end
     
-    
-    function MDF = calcBosonicMDF(obj, nk_target)
-        % Estimate the MDF given a rapidity distribution.
-        
-        
-        k_array     = obj.convert2SI(obj.rapid_grid,'rapidity');
-        
-        % find peaks of rapidity disitribtions
-        peak_idx    = find(islocalmax(nk_target));
-        
-        % remove false peaks around edges
-        edge        = ceil(obj.N/10); % edges are 10% of points on either side
-        peak_idx    = peak_idx( peak_idx>edge & peak_idx<(obj.N-edge) );
-        
-        peak_k      = k_array(peak_idx)';
-        Npeaks      = length(peak_idx);
-   
-        
-        % save couplings and grids. use x_grid of length 1 for speed
-        dens_total  = trapz(k_array, nk_target); % N atoms in region
-        mu_old      = obj.couplings{1,1};
-        x_old       = obj.x_grid;
-        
-        obj.x_grid = 0;
-        obj.M = 1;
-
-        % find effective temperature assuming rapidity distribution is
-        % close to a thermal state
-        cost        = @(x) sum(( nk_target - sum(calcMultipeakProfile(obj, x(1:Npeaks), x(end), peak_idx),2) ).^2);
-        x_guess     = [0.5*mu_old(0,0) * ones(1,Npeaks) , 100e-9];
-%         options     = optimset('Display','iter');
-        options     = optimset('Display','none');
-        fit_res     = fminsearch(cost, x_guess, options);
-
-        
-        % from effective temperature and densities of peaks, estimate MDF
-        [nk_fit,dens_fit]= calcMultipeakProfile(obj, fit_res(1:Npeaks), fit_res(end), peak_idx);        
-        lambda      = 2*2*obj.hbar_si^2 * dens_fit./(obj.m_si*obj.kB_si*fit_res(end)); % NOTE: there is an extra factor 2 here. why? because it works.
-        MDF         = lambda.^(-1) ./ (lambda.^(-2) + (k_array-peak_k).^2);
-        
-        % normalize MDF to norm of nk_target
-        MDF         = dens_total*MDF / trapz(k_array, sum(MDF,2), 1);
-        MDF         = sum(MDF,2);
-        
-        % return to old couplings
-        obj.couplings{1,1} = mu_old;
-        obj.x_grid = x_old;
-        obj.M = length(x_old);
-        
-%         % plot for testing
-%         figure
-%         
-%         subplot(2,1,1)
-%         hold on
-%         box on
-% %         plot( k_array*1e-6, nk_fit.*dens_total *1e6 )
-%         plot( k_array*1e-6, nk_fit *1e6 )
-%         plot( k_array*1e-6, nk_target*1e6, 'k')
-%         plot( k_array*1e-6, sum(nk_fit,2)*1e6, 'm:')
-%         
-%         legend('\rho = ' + string(dens_fit*1e-6))
-%         
-%         subplot(2,1,2)
-%         hold on
-%         box on
-%         plot( k_array*1e-6, MDF *1e6 )
-%         plot( k_array*1e-6, sum(MDF,2) *1e6, 'm:' )
-%         
-%         legend('\lambda = ' + string(lambda*1e6))
-%         
-%         sgtitle(['T_{fit} = ' num2str(fit_res(end)*1e9) 'nK'])
-        
-        
-        function [nk_peaks, dens_peak] = calcMultipeakProfile(obj, mu, T, peak_idx)
-            nk_peaks = zeros(obj.N, length(peak_idx));
-            dens_peak= zeros(1    , length(peak_idx));
-
-            for i = 1:length(peak_idx) % number of peaks
-                obj.couplings{1,1} = @(t,x) mu(i);
-
-                theta   = obj.calcThermalState(T);
-                rho     = obj.transform2rho(theta);
-                
-                shift   = floor(peak_idx(i)-obj.N/2);
-                rho     = circshift(double(rho), shift );
-                if shift > 0 % rho shifted right
-                    % pad left side
-                    rho(1:shift) = 0;
-                elseif shift < 0 % rho shifted left
-                    % pad right side
-                    rho(obj.N+1+shift:end) = 0;
-                end
-
-                nk_peaks(:,i)   = rho;
-                dens_peak(i)    = trapz(obj.convert2SI(obj.rapid_grid,'rapidity'), rho);
-            end
-
-        end % end nested function
-    
-    end
     
 end % end public methods
 

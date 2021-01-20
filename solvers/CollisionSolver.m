@@ -1,21 +1,27 @@
 classdef CollisionSolver < iFluidSolver
     
-% Solves GHD equation with collision integral
-% Currently only works for two-component Lieb-Liniger model
+% Solves GHD equation with collision integral using a split-step
+% propagation scheme.
+% Currently only works for the Lieb-Liniger model.
     
 properties (Access = protected)
     theta_mid = []; % Midpoint filling required for taking 2nd order step
+    nu_mid = [];
     
     I_prev = []; 
     J_prev = [];
+    I_mid = []; 
+    J_mid = [];
+
     
     lperp = [];
     gamma = [];
+    nu_init = [0, 0];
     
     gridmap_p = [];
     gridmap_m = [];
-    P1 = [];
-    P2 = [];
+    Pp = [];
+    Pm = [];
     
 end % end protected properties
 
@@ -41,17 +47,22 @@ methods (Access = public)
         rapid_m = 0.5*(obj.rapid_grid + rapid_aux) + sign(obj.rapid_grid - rapid_aux).*qm;
     
         % setup gridmap for interpolation
-        obj.gridmap_p = obj.calcInterpolationMap( obj.rapid_grid , rapid_p(:) , 0);
-        obj.gridmap_m = obj.calcInterpolationMap( obj.rapid_grid , rapid_m(:) , 0);
+        obj.gridmap_p = obj.calcInterpolationMap( obj.rapid_grid , rapid_p(:) , 0 , 0);
+        obj.gridmap_m = obj.calcInterpolationMap( obj.rapid_grid , rapid_m(:) , 0 , 0);
         
         % calculate common factors in integrals 
         % NOTE: ASSUMES CONSTANT COUPLINGS!!!
-        Pp      = obj.coreObj.calcExctProb(0, obj.x_grid, k, qp);
-        Pm      = obj.coreObj.calcExctProb(0, obj.x_grid, k, qm);
+        Pp      = obj.coreObj.calcExcitationProb(0, obj.x_grid, k, qp);
+        Pm      = obj.coreObj.calcExcitationProb(0, obj.x_grid, k, qm);
         
-        obj.P1 = 2*(2*pi)^2 * Pm.*2.*k.*heaviside( 2*k*lperp-2*sqrt(2) );
-        obj.P2 = 2*(2*pi)^2 * Pp.*2.*k;
-
+        obj.Pm = 2*(2*pi)^2 * Pm.*k.*heaviside( 2*k*lperp-2*sqrt(2) );
+        obj.Pp = 2*(2*pi)^2 * Pp.*k;
+        
+    end
+   
+    
+    function setInitialNu(obj, nu_init)
+        obj.nu_init = nu_init;        
     end
     
     
@@ -64,33 +75,40 @@ methods (Access = public)
         % Output:   I    -- quasi-particle collision integral
         %           J    -- excitation "collision integral"
         % =================================================================
-        
-        % calculate rho_p and rho_h on collision grids        
-        rhoP_m = obj.interp2map( rhoP, obj.gridmap_m);
-        rhoP_p = obj.interp2map( rhoP, obj.gridmap_p);
-        rhoH_p = obj.interp2map( rhoH, obj.gridmap_p);
-        rhoH_m = obj.interp2map( rhoH, obj.gridmap_m);
-        
 
-        % evaluate collision integral
-        Iint    = obj.P1.*(-rhoP.*rhoP.t().*rhoH_m.*rhoH_m.t()        + ...
-                            rhoH.*rhoH.t().*rhoP_m.*rhoP_m.t().*nu)   + ...
-                  obj.P2.*(-rhoP.*rhoP.t().*rhoH_p.*rhoH_p.t().*nu    + ...
-                            rhoH.*rhoH.t().*rhoP_p.*rhoP_p.t()         );
-                   
-        % integrate Iint over rapid_aux
-        I       = sum(Iint.*permute(obj.rapid_w, [4 2 3 1]), 4);
+        % calculate rho_p and rho_h on collision grids        
+        rhoP_m   = obj.interp2map( rhoP, obj.gridmap_m);
+        rhoP_p   = obj.interp2map( rhoP, obj.gridmap_p);
+        rhoH_p   = obj.interp2map( rhoH, obj.gridmap_p);
+        rhoH_m   = obj.interp2map( rhoH, obj.gridmap_m);
         
-        % calculate collision integral for nu
-        Nat     = trapz(obj.x_grid , sum(rhoP.*obj.rapid_w,1,'d') , 2);
-        dx      = obj.x_grid(2) - obj.x_grid(1);
+        % Calculate colition integral components
+        Ip_minus = trapz( obj.rapid_grid, double(obj.Pm.*(rhoP.*rhoP.t().*rhoH_m.*rhoH_m.t())), 4);
+        Ih_minus = trapz( obj.rapid_grid, double(obj.Pm.*(rhoH.*rhoH.t().*rhoP_m.*rhoP_m.t())), 4);
+        Ip_plus  = trapz( obj.rapid_grid, double(obj.Pp.*(rhoP.*rhoP.t().*rhoH_p.*rhoH_p.t())), 4);
+        Ih_plus  = trapz( obj.rapid_grid, double(obj.Pp.*(rhoH.*rhoH.t().*rhoP_p.*rhoP_p.t())), 4);
+
+        % Normalize minus grids to plus grids
+        Nh_plus  = trapz(obj.x_grid, trapz(obj.rapid_grid, double(Ih_plus), 1), 2);
+        Np_plus  = trapz(obj.x_grid, trapz(obj.rapid_grid, double(Ip_plus), 1), 2);
+        Nh_minus = trapz(obj.x_grid, trapz(obj.rapid_grid, double(Ih_minus), 1), 2);
+        Np_minus = trapz(obj.x_grid, trapz(obj.rapid_grid, double(Ip_minus), 1), 2);
+
+        Ip_minus = (Nh_plus./Np_minus).*Ip_minus;
+        Ih_minus = (Np_plus./Nh_minus).*Ih_minus;
         
-        Jint    = (obj.P1/(2*Nat)).*( rhoP.*rhoP.t().*rhoH_m.*rhoH_m.t() - ...
-                                      rhoH.*rhoH.t().*rhoP_m.*rhoP_m.t().*nu);
         
-        % integrate over all rapidities and space
-        J       = sum(Jint.*permute(obj.rapid_w, [4 2 3 1]), 4);
-        J       = sum( dx*sum(J.*obj.rapid_w,1), 2, 'd');
+        Next     = [2, 1]; % number of excited atoms in a collision
+        zeta     = [0.5, 0.5]; % relative transition strength
+        I        = zeros(size(rhoP));
+        J        = zeros(size(nu));
+        for i = 1:2           
+            % Add contributions to collision integral
+            Nat         = trapz(obj.x_grid, trapz(obj.rapid_grid, double(rhoP), 1), 2);
+            I           = I + zeta(i)*(- Ip_minus + Ih_minus.*(nu(i).^Next(i)) - Ip_plus.*(nu(i).^Next(i)) + Ih_plus);
+            J_temp      = Next(i)/(2*Nat) * ( zeta(i)*Ih_plus - zeta(i)*Ip_plus.*(nu(i).^Next(i)) );
+            J(i)        = trapz(obj.x_grid,  trapz(obj.rapid_grid, double(J_temp), 1), 2);
+        end
         
     end
     
@@ -116,13 +134,8 @@ methods (Access = protected)
         dt      = t_array(2) - t_array(1);
         ddt     = dt/2/10;
         theta   = theta_init;
-        u       = 0;          % u is excitation probability in this solver
+        u       = obj.nu_init;          % u is excitation probability in this solver
         w       = w_init;
-
-        % Calculate first theta_mid at t = dt/10/2 using first order
-        % step, then use that to calculate the actual theta_mid at
-        % t = dt/2 using second order steps.        
-        obj.theta_mid = obj.performFirstOrderStep(theta_init, u_init, w_init, 0, ddt/2);
 
         % Set up collision integrals for propagation
         [rhoP, rhoS]= obj.coreObj.transform2rho(theta_init, 0);
@@ -130,7 +143,15 @@ methods (Access = protected)
         [I, J]      = obj.calcCollisionIntegral( rhoP, rhoH, u);
         obj.I_prev  = I;
         obj.J_prev  = J;
+        obj.I_mid   = I;
+        obj.J_mid   = J;
         
+        % Calculate first theta_mid at t = dt/10/2 using first order
+        % step, then use that to calculate the actual theta_mid at
+        % t = dt/2 using second order steps. 
+        obj.theta_mid = theta_init + ddt/2*I;
+        obj.nu_mid    = u + ddt/2*J + ddt/2*[obj.gamma, obj.gamma*u(1)];      
+        obj.theta_mid = obj.performFirstOrderStep(obj.theta_mid, u_init, w_init, 0, ddt/2);
         
         theta_temp  = theta;
         u_temp      = u;
@@ -141,6 +162,11 @@ methods (Access = protected)
         end
 
         obj.theta_mid = theta_temp;
+        obj.nu_mid = u_temp;
+        
+        obj.I_mid = obj.I_prev;
+        obj.J_mid = obj.J_prev;
+        
         obj.I_prev = I;
         obj.J_prev = J;
     end
@@ -167,12 +193,12 @@ methods (Access = protected)
 
         % First part of split step: solve collision equation
         rhoP        = rhoP + 0.5*dt*(3*I - obj.I_prev);
-        u_next      = u_prev + 0.5*dt*(3*J - obj.J_prev) + obj.gamma*dt;
+        u_next      = u_prev + 0.5*dt*(3*J - obj.J_prev) + dt*[obj.gamma*(1-u_prev(1)), obj.gamma*u_prev(1)];
         
         obj.I_prev  = I;
         obj.J_prev  = J;
         
-        theta_prev  = obj.coreObj.transform2theta(rhoP, t);
+        theta_prev  = obj.coreObj.transform2theta(rhoP, t);       
         
         % Second part of split step: solve propagation equation
         theta_next = step2(obj, obj.theta_mid, theta_prev, t, dt);
@@ -181,8 +207,20 @@ methods (Access = protected)
         % Perform another step with newly calculated theta as midpoint, in
         % order to calculate the midpoint filling for the next step.
         % I.e. calculate theta(t+dt+dt/2) using theta(t+dt) as midpoint.
-        obj.theta_mid  = step2(obj, theta_next, obj.theta_mid, t+dt/2, dt);
+        [rhoP, rhoS]= obj.coreObj.transform2rho(obj.theta_mid, t+dt/2);
+        rhoH        = rhoS - rhoP;
+        [I, J]      = obj.calcCollisionIntegral( rhoP, rhoH, obj.nu_mid);
+
+        % First part of split step: solve collision equation
+        rhoP        = rhoP + 0.5*dt*(3*I - obj.I_mid);
+        obj.nu_mid  = obj.nu_mid + 0.5*dt*(3*J - obj.J_mid) + dt*[obj.gamma*(1-obj.nu_mid(1)), obj.gamma*obj.nu_mid(1)];
         
+        obj.I_mid   = I;
+        obj.J_mid   = J;
+        
+        obj.theta_mid  = obj.coreObj.transform2theta(rhoP, t+dt/2);         
+        obj.theta_mid  = step2(obj, theta_next, obj.theta_mid, t+dt/2, dt);
+
 
         function theta_next = step2(obj, theta_mid, theta_prev, t, dt)
             % Estimate x' and rapid' using midpoint filling
@@ -212,6 +250,7 @@ end % end protected methods
 
 methods (Access = private)
     
+
     function Qint = interp2map(obj, Q, map)
         % =================================================================
         % Purpose : Takes a quantity Q defined on rapidity grid and
@@ -235,7 +274,7 @@ methods (Access = private)
     end
     
     
-    function IM = calcInterpolationMap( obj, grid_from, grid_to , cubicflag)
+    function IM = calcInterpolationMap(obj, grid_from, grid_to, extrapflag, cubicflag)
         % =================================================================
         % Purpose : Create map between two grids 
         % Input :   grid_from   -- Old grid.
@@ -244,7 +283,7 @@ methods (Access = private)
         %                           splines + sparse matrix.
         % Output:   IM           -- Matrix encoding the mapping.
         % =================================================================
-        
+
         N1 = length(grid_from);
         N2 = length(grid_to);
 
@@ -281,11 +320,21 @@ methods (Access = private)
             [ ~, ix ] = min( abs( grid_from-grid_to(i) ) );
 
             if ix == 1 % extrapolation
-                ix = ix+1;
-                S = 0;
+                if extrapflag
+                    ix = ix+1;
+                    S = 0;
+                else
+                   IM(i,:) = 0;
+                   continue
+                end
             elseif ix == N1
-                ix = ix-1;
-                S = 0;
+                if extrapflag
+                    ix = ix-1;
+                    S = 0;
+                else
+                   IM(i,:) = 0;
+                   continue
+                end
             end
 
             if grid_from(ix) < grid_to(i) % align between gridpoints x_{i-1} and x_{i}
@@ -305,7 +354,7 @@ methods (Access = private)
             IM(i,:) = IM(i,:) - S*B(ix-1,:)*dx1*h(ix)/6;
             IM(i,:) = IM(i,:) - S*B(ix,:)*dx2*h(ix)/6;
         end
-        
+
         if ~cubicflag
             IM = sparse(IM);
         end

@@ -236,7 +236,7 @@ methods (Access = public)
     
     function C = sum(obj, index, t_str )
         % Sums over index
-        x = sum( double(obj), index );
+        x = sum( double(obj), index , 'omitnan' );
         
         % Decide if output is double or iFluidTensor
         if nargin == 3

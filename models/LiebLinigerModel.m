@@ -154,7 +154,236 @@ methods (Access = public)
         end % end nested function
     end
     
+    
+    function [mu0_fit, nu] = fitAtomnumber3D(obj, T, V_ext, Natoms, mu0_guess, N_levels, mu_level, setCouplingFlag)
+        % =================================================================
+        % Purpose : Estimates the fraction of atoms in transverse excited
+        %           states, where each level is treated as a separate
+        %           Lieb-Liniger model with chemical potential offset by
+        %           the transverse level spacing.
+        % Input :   T       -- Temeprature of system (scalar or @(x)).
+        %           V_ext   -- External longitudinal potential as @(x).
+        %           Natoms  -- Number of atoms.
+        %           mu0_guess -- Initial guess for central chemical pot.
+        %           N_levels -- Number of transverse levels accounted for.
+        %           setCouplingFlag -- (optional)if true, set coupling to 
+        %                               fitted mu
+        % Output:   mu0_fit -- Fitted central chemical potential.
+        %           nu      -- Fitted transverse populations.
+        % =================================================================
+        
+        if nargin < 6
+            setCouplingFlag = false;
+        end
+        
+        if isempty(V_ext)
+            V_ext = obj.couplings{1};
+        end
+        
+        % Fit mu0 to Natoms
+        fitfunc     = @(mu0) abs( Natoms - calcNA(mu0, T, V_ext, N_levels, mu_level) );
+        options     = optimset('Display','iter');
+        mu0_fit     = fminsearch(fitfunc, mu0_guess,options);
+        
+        [~, nu]     = calcNA( mu0_fit, T, V_ext, N_levels, mu_level);
+        
+        if setCouplingFlag % adjust couplings to result
+            obj.couplings{1,1} = @(t,x) mu0_fit - V_ext(t,x);
+        end
+        
+        function [Natoms, nu] = calcNA(mu0, T, V_ext, N_levels, mu_level)
+            % Calculate total number of atoms
+            mu_old  = obj.couplings{1,1};
+            NA_i    = zeros(1, N_levels);
+            rho_i   = [];
+            
+            % calculate contribution from each transverse level
+            for i = 1:N_levels
+                mu_fit      = @(t,x) mu0 - mu_level*(i-1) - V_ext(t,x);
+                obj.couplings{1,1} = mu_fit;
 
+                ebare   = obj.getBareEnergy(0, obj.x_grid, obj.rapid_grid, obj.type_grid);
+                if isa(T, 'function_handle')
+                    T       = T(obj.x_grid);
+                end
+
+                w       = ebare./T;
+                e_eff   = obj.calcEffectiveEnergy(w, 0, obj.x_grid);
+                rho     = calcRho( e_eff );
+                density = sum( obj.rapid_w.*rho, 1, 'd' );
+
+                NA_i(i) = trapz(obj.x_grid, density);
+            end
+
+            Natoms  = sum(NA_i); % sum the contributions
+            nu      = NA_i/Natoms;
+            
+            obj.couplings{1,1} = mu_old;
+        end % end nested function
+        
+        function rho = calcRho(e_eff)
+            % Calculate the quasiparticle density
+            kernel      = obj.getScatteringRapidDeriv(0, obj.x_grid, obj.rapid_grid, obj.rapid_aux, obj.type_grid, obj.type_aux );
+                
+            rho         = iFluidTensor(obj.N, size(e_eff,2), obj.Ntypes);
+            rho_old     = iFluidTensor(obj.N, size(e_eff,2), obj.Ntypes);
+            error_rel   = 1;
+            count       = 0;
+
+            while any(error_rel > obj.tolerance) & count < obj.maxcount % might change this
+                rho = (1 - kernel*(obj.rapid_w.*rho_old))./(2*pi*(1+exp(e_eff)));
+                
+                % calculate error
+                v1          = flatten(rho);
+                v2          = flatten(rho_old);
+
+                sumeff      = sum( v1.^2 ,1);            
+                error_rel   = squeeze(sum( (v1 - v2).^2, 1)./sumeff);
+                rho_old     = rho;
+
+                count       = count+1;
+            end
+        end % end nested function
+        
+    end
+    
+    
+    function [mu0_fit, theta_fit] = fitDensity(obj, T, density_target, mu0_guess)
+        % =================================================================
+        % Purpose : Assuming a homogeneous system, fit the chemical
+        %           potential to reproduce the desired atomic density. 
+        % Input :   T       -- Temeprature of system (scalar or @(x)).
+        %           density_target -- Density to fit to.
+        %           mu0_guess -- Initial guess for central chemical pot.
+        % Output:   mu0_fit -- Fitted central chemical potential.
+        %           theta_fit -- Fitted filling function.
+        % =================================================================
+        fitfunc     = @(mu0) abs( density_target - calcDens(obj, mu0, T) );
+        options     = optimset('Display','iter');
+        mu0_fit     = fminsearch(fitfunc, mu0_guess, options);
+        
+        [~, theta_fit] = calcDens(obj, mu0_fit, T);
+        
+        function [density, theta] = calcDens(obj, mu0, T)
+            mu_old      = obj.couplings{1,1};
+            obj.couplings{1,1} = @(t,x) mu0;
+            
+            ebare   = obj.getBareEnergy(0, 0, obj.rapid_grid, obj.type_grid);
+
+            if isa(T, 'function_handle')
+                T       = T(0);
+            end
+            
+            w       = ebare./T;
+            e_eff   = obj.calcEffectiveEnergy(w, 0, 0);
+            theta   = obj.calcFillingFraction(e_eff);
+            
+            dp      = obj.getMomentumRapidDeriv(0, 0, obj.rapid_grid, obj.type_grid);
+            h0      = ones(obj.N, 1);            
+            h0_dr   = obj.applyDressing(h0, theta, 0);   
+            density = 1/(2*pi) * squeeze(sum( obj.rapid_w .* sum( double(dp.*theta.*h0_dr) , 3) , 1));
+            
+            obj.couplings{1,1} = mu_old;
+        end % end nested function
+    end
+    
+
+    function [x, theta_fit] = fitThermalState(obj, theta_noneq, t, x0, options)
+        % =================================================================
+        % Purpose : Given a non-equilibrium state, calculate a thermal
+        %           state with the same energy.
+        % Input :   theta_noneq -- Filling fraction at time t.
+        %           t           -- Time.
+        %           x0          -- Initial guesses:
+        %                           x0(1) = temperature
+        %                           x0(2) = central chemical potential
+        %           options     -- Fitting options.
+        % Output:   x           -- Fitted temperature and mu0.
+        %           theta_fit   -- Fitted therml state.
+        % =================================================================
+                
+        if nargin < 6 % No options supplied
+            options = [];
+        end
+        
+        [N_target, E_target] = computeNE(theta_noneq, t);
+
+        xLast   = []; % Last place computeall was called
+        Na_last = []; % Use for N_atoms at xLast
+        Et_last = []; % Use for E_total at xLast
+        theta_last = []; 
+
+        fun     = @objfun; % The objective function, nested below
+        cfun    = @constr; % The constraint function, nested below
+
+        % Call fmincon
+        [x,f,eflag,outpt] = fmincon(fun,x0,[],[],[],[],[],[],cfun,options);
+        [~,~,theta_fit] = computeall(x);
+
+        function f = objfun(x)
+            if ~isequal(x,xLast) % Check if computation is necessary
+                [Na_last, Et_last, theta_last] = computeall(x);
+                xLast = x;
+            end
+            
+            % Now compute objective function
+            f = abs( E_target - Et_last );
+        end
+
+        function [c,ceq] = constr(x)
+            if ~isequal(x,xLast) % Check if computation is necessary
+                [Na_last, Et_last, theta_last] = computeall(x);
+                xLast = x;
+            end
+            % Now compute constraint function
+            c   = [];
+            ceq = N_target - Na_last;
+        end
+        
+        function [N_atoms, E_total, theta] = computeall(x) 
+            T           = x(1);
+            mu0         = x(2);
+            
+            % Calculate thermal state
+            mu0_old     = obj.couplings{1,1}(t,0);
+            mu_old      = obj.couplings{1,1};
+            mu_fit      = @(t,x) mu0 - (mu0_old - mu_old(t,x));
+            obj.couplings{1,1} = mu_fit;
+            
+            ebare   = obj.getBareEnergy(t, obj.x_grid, obj.rapid_grid, obj.type_grid);
+            if isa(T, 'function_handle')
+                T       = T(obj.x_grid);
+            end
+
+            w       = ebare./T;
+            e_eff   = obj.calcEffectiveEnergy(w, t, obj.x_grid);
+            theta = obj.calcFillingFraction(e_eff);
+
+            obj.couplings{1,1} = mu_old;
+            
+            [N_atoms, E_total] = computeNE(theta, t);
+        end
+        
+        function [N_atoms, E_total] = computeNE(theta, t) 
+            % Calculate number of atoms and total energy
+            dp      = obj.getMomentumRapidDeriv(t, obj.x_grid, obj.rapid_grid, obj.type_grid);
+
+            h0      = obj.getOneParticleEV( 0, t, obj.x_grid, obj.rapid_grid);           
+            h0_dr   = obj.applyDressing(h0, theta, t);
+            
+            h2      = obj.getOneParticleEV( 2, t, obj.x_grid, obj.rapid_grid);           
+            h2_dr   = obj.applyDressing(h2, theta, t);
+                
+            ndens   = 1/(2*pi) * squeeze(sum( obj.rapid_w .* sum( double(dp.*theta.*h0_dr) , 3) , 1));
+            edens   = 1/(2*pi) * squeeze(sum( obj.rapid_w .* sum( double(dp.*theta.*h2_dr) , 3) , 1));
+            
+            N_atoms = trapz(obj.x_grid, ndens);
+            E_total = trapz(obj.x_grid, edens);
+        end  % end nested functions
+          
+    end
+    
+    
     function [v_eff, a_eff] = calcEffectiveVelocities(obj, theta, t, x, rapid, type)        
         % =================================================================
         % Purpose : Overloads superclass method, as acceleration in LL
@@ -339,10 +568,16 @@ methods (Access = public)
     end
     
     
-    function P = calcExctProb(obj, t, x, k, q)
-        zeta = 0.5;
+    function P = calcExcitationProb(obj, t, x, k, q)
         c = obj.couplings{1,2}(t,x);
-        P = zeta*k.*q.*c.^2 ./(k.^2 .* q.^2 + 0.25*c.^2 .* (k + q).^2);
+        P = k.*q.*c.^2 ./(k.^2 .* q.^2 + 0.25*c.^2 .* (k + q).^2);
+        
+        P(isnan(P)) = 0; 
+    end
+    
+    function P = calcExchangeProb(obj, t, x, rapid1, rapid2)
+        c = obj.couplings{1,2}(t,x);
+        P = (c.^2 .* abs(rapid1 - rapid2))./(c.^2 + (rapid1 - rapid2).^2);
         
         P(isnan(P)) = 0; 
     end

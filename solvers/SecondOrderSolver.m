@@ -100,9 +100,11 @@ methods (Access = protected)
             if obj.calcCharac
                 u_next  = obj.interpPhaseSpace(u_prev, r_back, x_back, true); % always extrapolate u
                 w_next  = obj.interpPhaseSpace(w_prev, r_back, x_back, true); % always extrapolate w
-            else
-                u_next  = u_prev;
-                w_next  = w_prev;
+            else % calculate trajectories
+                v_int = obj.interpPhaseSpace(v_eff, w_prev, u_prev, true);
+                a_int = obj.interpPhaseSpace(a_eff, w_prev, u_prev, true);
+                u_next  = u_prev + dt*v_int;
+                w_next  = w_prev + dt*a_int;         
             end
         end % end nested function
     end

@@ -42,6 +42,7 @@ properties (Access = protected)
     extrapFlag      = false;    % Flag for using extrapolation during propagation (useful for open systems)
     periodRapid     = false;    % Flag for periodic boundary conditions on rapidity
     calcCharac      = true;     % Flag for if characteristics are calculated
+    storeNthStep    = 1;        % Store every n'th step
 
 end % end protected properties
 
@@ -88,6 +89,7 @@ methods (Access = public)
                 end
             end
         end
+
     end
 
     
@@ -105,20 +107,20 @@ methods (Access = public)
         %                         with each entry corresponding to t_array.
         % =================================================================
         Nsteps          = length(t_array) - 1;
+        Nstored         = 1 + ceil( Nsteps/obj.storeNthStep );
         
         % Initializes cell arrays
-        theta_t         = cell(1, Nsteps+1);
-        theta_t{1}      = theta_init;
-        
-        u_t             = cell(1, Nsteps+1);
+        theta_t         = cell(1, Nstored);      
+        u_t             = cell(1, Nstored);
+        w_t             = cell(1, Nstored);
+                                
         u_init          = iFluidTensor( repmat( obj.x_grid, obj.N, 1, obj.Ntypes) );
-
-        w_t             = cell(1, Nsteps+1);
         w_init          = iFluidTensor( repmat( obj.rapid_grid, 1, obj.M, obj.Ntypes) );
 
         % Initializes the propagation, calculating and internally storing
         % any additional quantities needed for the step-function.
         [theta, u, w]   = obj.initialize(theta_init, u_init, w_init, t_array);
+        theta_t{1}      = theta;
         u_t{1}          = u;
         w_t{1}          = w;
         
@@ -129,12 +131,18 @@ methods (Access = public)
         cpb.start();   
 
         % Propagate theta using stepfunction
+        count = 2;
         for n = 1:Nsteps
             dt            = t_array(n+1) - t_array(n);
             [theta, u, w] = obj.step(theta, u, w, t_array(n), dt);
-            theta_t{n+1}  = theta;
-            u_t{n+1}      = u;
-            w_t{n+1}      = w;
+            
+            if mod(n, obj.storeNthStep) == 0
+                theta_t{count}  = theta;
+                u_t{count}      = u;
+                w_t{count}      = w;
+                
+                count           = count + 1;
+            end
             
             % show progress
             cpb_text = sprintf('%d/%d steps evolved', n, Nsteps);

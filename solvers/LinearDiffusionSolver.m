@@ -29,7 +29,9 @@ methods (Access = protected)
     % Implementation of abstract functions
     
     function [theta, u, w] = initialize(obj, theta_init, u_init, w_init, t_array)
-        % Not used
+        theta = theta_init;
+        u = u_init;
+        w = w_init;
     end
       
     function [theta_next, u_next, w_next] = step(obj, theta_prev, u_prev, w_prev, t, dt)
