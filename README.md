@@ -11,6 +11,7 @@ The complete iFluid documentation can be found [here!](https://integrablefluid.g
 
 ## Published papers using iFluid
 [SciPost Phys. 8, 041 (2020)](https://scipost.org/SciPostPhys.8.3.041)
+
 [SciPost Phys. Core 3, 016 (2020)](https://scipost.org/SciPostPhysCore.3.2.016)
 
 ## References
