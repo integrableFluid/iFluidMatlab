@@ -203,6 +203,66 @@ methods (Access = public)
         fprintf('\n')
     end
     
+    
+    function [U, W] = calcCharacteristics(obj, theta_t, t_array, t_0_idx)
+        % =================================================================
+        % Purpose : Calculates the characteristics with starting points 
+        %           t_array(t_0_idx).
+        % Input :   theta_t    -- Filling function at times t in t_array.
+        %           t_array    -- Array of times t (gives propagation step).
+        %           t_0_idx    -- Starting indices of t_array.
+        % Output:   U          -- Position characteristics.
+        %           W          -- Rapidity characteristics.
+        % =================================================================
+        
+        
+        % Initialize characteristics
+        U_init      = iFluidTensor( repmat( obj.x_grid, obj.N, 1, obj.Ntypes) );
+        W_init      = iFluidTensor( repmat( obj.rapid_grid, 1, obj.M, obj.Ntypes) );
+        
+        U           = cell(length(t_0_idx), length(t_array));
+        W           = cell(length(t_0_idx), length(t_array));
+        
+        for i = 1:length(t_0_idx)
+            U{i,t_0_idx(i)} = U_init;
+            W{i,t_0_idx(i)} = W_init;
+        end
+        
+        % Propagate characteristic
+        for n = 1:length(t_array)-1
+            dt          = t_array(n+1) - t_array(n);
+            t_cur       = t_array(n);
+            theta_mid   = (theta_t{n+1} + theta_t{n})/2;
+            
+            [v_e, a_e]  = obj.TBA.calcEffectiveVelocities(theta_mid, t_cur+dt/2);
+            x_mid       = obj.x_grid - 0.5*dt*v_e;
+            r_mid       = obj.rapid_grid - 0.5*dt*a_e; 
+
+            % Interpolate v_eff and a_eff to midpoint coordinates x' and rapid' 
+            v_mid       = obj.interpPhaseSpace( v_e, r_mid, x_mid, true );
+            a_mid       = obj.interpPhaseSpace( a_e, r_mid, x_mid, true );
+            
+            % From midpoint velocity calculate fullstep x and rapid translation
+            x_back      = obj.x_grid - dt*v_mid;
+            r_back      = obj.rapid_grid - dt*a_mid;
+            
+            % propagate all characterstics
+            for i = 1:length(t_0_idx)
+                U_prev = U{i,n};
+                W_prev = W{i,n};
+                
+                if ~isempty(U_prev) && ~isempty(W_prev)
+                    U{i,n+1} = obj.interpPhaseSpace(U_prev, r_back, x_back, true);
+                    W{i,n+1} = obj.interpPhaseSpace(W_prev, r_back, x_back, true); 
+                end
+            end          
+            
+        end
+        
+    
+    end
+    
+    
 end % end public methods
 
 
@@ -356,6 +416,72 @@ methods (Access = private)
         end
  
         IM = iFluidTensor(IM);
+    end
+    
+    
+    function tensor_int = interpPhaseSpace(obj, tensor_grid, rapid_int, x_int, extrapFlag)
+        % =================================================================
+        % Purpose : Interpolates an iFluidTensor defined on the grids 
+        %           stored in the object to new coordinates.
+        %           This function exists because MATLAB has different
+        %           syntax between interp1 and interp2in terms of 
+        %           extrapolation...
+        % Input :   tensor_grid -- iFluidTensor defined on rapid_grid,
+        %                          x_grid, and type_grid.
+        %           rapid_int   -- Rapidity values to interpolate to
+        %                           (should be iFluidTensor sized
+        %                            [N, M, Ntypes] )
+        %           x_int       -- Spatial values to interpolate to
+        %                           (should be iFluidTensor sized
+        %                            [N, M, Ntypes] )
+        %           extrapFlag  -- if true, enable extrapolations
+        %                          if false, all extrap. values are zero
+        % Output:   tensor_int -- iFluidTensor interpolated to input grids.
+        % =================================================================
+        
+        % Cast to matrix form
+        x_int       = double(x_int);
+        rapid_int   = double(rapid_int);
+        mat_grid    = double(tensor_grid); % should be (N,M,Nt)
+        
+        % Need spacial dimension as first index in order to use (:) linearization
+        x_int       = permute(x_int, [2 1 3]); % (M,N,Nt)
+        rapid_int   = permute(rapid_int, [2 1 3]);
+        
+        x_g         = permute(obj.x_grid, [2 1 3]); % (M,N,Nt)
+        rapid_g     = permute(obj.rapid_grid, [2 1 3]);
+        
+        % Enforce periodic boundary conditions
+        if obj.periodRapid 
+            rapid_int = mod(rapid_int + obj.rapid_grid(1), obj.rapid_grid(end)-obj.rapid_grid(1)) + obj.rapid_grid(1);
+        end
+        
+        % Get matrix representation of iFluidTensor and pemute spacial index
+        % to first.
+        mat_grid    = permute(mat_grid, [2 1 3]);
+        mat_int     = zeros(obj.M, obj.N, obj.Ntypes);
+        
+        for i = 1:obj.Ntypes
+            rapid_i = rapid_int(:,:,i);
+            x_i     = x_int(:,:,i);
+            mat_g   = mat_grid(:,:,i);   
+            
+            if extrapFlag
+                mat_tmp = interp2( rapid_g, x_g, mat_g, rapid_i(:), x_i(:), 'spline');
+            else
+                % Set all extrapolation values to zero!
+                mat_tmp = interp2( rapid_g, x_g, mat_g, rapid_i(:), x_i(:), 'spline', 0);
+            end
+           
+            mat_tmp(isnan(mat_tmp)) = 0;
+            mat_tmp = reshape(mat_tmp, obj.M, obj.N);
+            mat_int(:,:,i) = mat_tmp;
+        end
+        
+        % Reshape back to original indices
+        mat_int = permute(mat_int, [2 1 3] );
+        
+        tensor_int = iFluidTensor(mat_int);
     end
     
 end % end private methods
