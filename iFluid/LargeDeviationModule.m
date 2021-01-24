@@ -61,46 +61,44 @@ methods (Access = public)
     end
     
     
-    
-    function [direct, indirect] = calc2PCorrelations( obj, theta_t, u_t, t_array, y_indices, VO1_t, VO2_0 )
+    function [direct, indirect] = calc2PCorrelations( obj, theta_t, U_t, VO_t, t_array, y_indices)
         % =================================================================
         % Purpose : Calculates dynamical two-point correlation functions of
-        %           the form <O1(x,t) O2(y,0)>
-        % Input :   theta_t   -- cell array of filling functions. First
-        %                         entry must be for time t=0.
-        %           u_t       -- cell array of characteristics. First entry
-        %                         must be for time t=0.
-        %           t_array   -- array of times corresponding to entries in
-        %                         theta_t and u_t.
+        %           the form <O1(x,t1) O2(y,t2)>
+        % Input :   theta_t   -- (2,Nt)-sized cell array of filling 
+        %                         functions.
+        %                         First row is theta at times t1,
+        %                         Second row is theta at times t2.
+        %           U_t       -- (1,Nt)-sized cell array of characteristic 
+        %                         functions. The i'th entry should be 
+        %                         U(t_array(1,i), t_array(2,i))
+        %           t_array   -- (2,Nt)-sized array of times.
+        %                         First row contains times t1.
+        %                         Second row contains times t2.
+        %           VO_t      -- (2,Nt)-sized cell array of form factors.
+        %                         First row is V1 at times t1,
+        %                         Second row is U at times t2.
         %           y_indices -- array of indices of x_grid, yielding the
         %                         desired values of y.
-        %           VO1_t     -- cell array containing form factors of
-        %                         operator O1 at t_array(2:end).
-        %           VO2_0     -- form factor of operator O2 at time t=0.
         % Output:   direct    -- direct correlations
         %           indirect  -- indirect correlations
-        % =================================================================
-        assert( length(theta_t) == length(u_t) )
-        assert( length(u_t) == length(t_array) )
-        assert( length(t_array) > 1 )
-        assert( t_array(1) == 0, "First entry of cell arrays must be at t = 0!" )
-        assert( min(y_indices) >= 1, "y indices must be above one!" )
-        assert( max(y_indices) <= obj.M, "y indices may not exceed length of x_grid!" )
-        if length(t_array) > 2
-            assert( length(VO1_t) == length(theta_t)-1 )
-        end
-        assert( isa( VO2_0, 'iFluidTensor' ) )
-            
+        % =================================================================           
         
-        direct      = zeros( obj.M, length(y_indices), length(t_array)-1 );
-        indirect    = zeros( obj.M, length(y_indices), length(t_array)-1 );
         
-        [rho_t, rhoS_t] = obj.TBA.transform2rho(theta_t, t_array);
-        IM          = obj.calcStateInhomogeniety( theta_t{1}, rho_t{1} );
+        Nt          = size(theta_t, 2);
+        
+        direct      = zeros(obj.M, length(y_indices), Nt);
+        indirect    = zeros(obj.M, length(y_indices), Nt);
+        
+        
+        [rho_t(1,:), rhoS_t(1,:)] = obj.TBA.transform2rho(theta_t(1,:), t_array(1,:));
+        [rho_t(2,:), rhoS_t(2,:)] = obj.TBA.transform2rho(theta_t(2,:), t_array(2,:));
+        
+        IM          = obj.calcStateInhomogeniety( theta_t(2,:), rho_t(2,:) );
 
         
         % initialize progress bar
-        Ntsteps = length(t_array) - 1;
+        Ntsteps = Nt;
         Nysteps = length(y_indices);
         
         fprintf('Calculating correlations for %d y-values and %d points in time.\n', Nysteps, Ntsteps )
@@ -110,28 +108,28 @@ methods (Access = public)
         fprintf('Correlation progress:');
         cpb.start();   
         
-        for ti = 2:length(t_array)
+        for ti = 1:Nt
             
-            % Calculate gradient of characteristic u
-            dudr_t = zeros(obj.N, obj.M, obj.Ntypes);
+            % Calculate gradient of characteristic U
+            dUdr_t = zeros(obj.N, obj.M, obj.Ntypes);
             for i = 1:obj.Ntypes
-                [~, dudr_t(:,:,i)] = gradient(u_t{ti}.getType(i,'d'), 0, obj.rapid_grid);
+                [~, dUdr_t(:,:,i)] = gradient(U_t{ti}.getType(i,'d'), 0, obj.rapid_grid);
             end
-            dudr_t      = iFluidTensor( dudr_t );
+            dUdr_t      = iFluidTensor( dUdr_t );
         
             yc          = 1; % y_count
             
             for yi = y_indices
                                 
-                theta_0y    = theta_t{1}.getX(yi);
-                f_0y        = obj.TBA.getStatFactor(theta_0y);
-                VO2_0y      = VO2_0.getX(yi);
+                theta_t2_y  = theta_t{2,ti}.getX(yi);
+                f_t2_y      = obj.TBA.getStatFactor(theta_t2_y);
+                VO2_y       = VO_t{2,ti}.getX(yi);
 
-                corr_prod   = rhoS_t{ti}.*theta_0y.*f_0y.*VO2_0y./abs(dudr_t); 
+                corr_prod   = rhoS_t{1,ti}.*theta_t2_y.*f_t2_y.*VO2_y./abs(dUdr_t); 
 
                 % Calculate source terms required for indirect propagator
-                W2_temp    = rhoS_t{1}.getX(yi).*f_0y.*VO2_0y;  
-                W2_temp_dr = obj.TBA.applyDressing( W2_temp, theta_0y, t_array(1) ); 
+                W2_temp    = rhoS_t{2,ti}.getX(yi).*f_t2_y.*VO2_y;  
+                W2_temp_dr = obj.TBA.applyDressing( W2_temp, theta_t2_y, t_array(2,ti) ); 
                 W2_temp_sdr= W2_temp_dr - W2_temp;
                 
                 
@@ -142,12 +140,12 @@ methods (Access = public)
                 % Iterate over x-grid, starting at x_0 where source is zero
                 for xi = 1:obj.M
                     dx          = obj.x_grid(2) - obj.x_grid(1);
-                    f_tx        = obj.TBA.getStatFactor(theta_t{ti}.getX(xi));
-                    gamma       = obj.findRootSet( u_t{ti}.getX(xi), obj.x_grid(yi), dudr_t.getX(xi) );
+                    f_t1_x      = obj.TBA.getStatFactor(theta_t{1,ti}.getX(xi));
+                    gamma       = obj.findRootSet( U_t{ti}.getX(xi), obj.x_grid(yi), dUdr_t.getX(xi) );
 
                     % Calculate contribution from direct propagator
-                    direct_temp = obj.interp2Gamma( corr_prod.getX(xi).*VO1_t{ti-1}.getX(xi), gamma);
-                    direct(xi,yc,ti-1) = sum( sum(direct_temp,3) ,1, 'd'); % sum over gamma (rapid1 and type1)
+                    direct_temp = obj.interp2Gamma( corr_prod.getX(xi).*VO_t{1,ti}.getX(xi), gamma);
+                    direct(xi,yc,ti) = sum( sum(direct_temp,3) ,1, 'd'); % sum over gamma (rapid1 and type1)
 
                     
                     % ----- Calculate indirect propagator ------
@@ -156,44 +154,44 @@ methods (Access = public)
                     if isempty(gamma)
                         integr = 0;
                     else
-                        Kern    = -1/(2*pi)*obj.TBA.getScatteringRapidDeriv( t_array(ti), obj.x_grid(xi), obj.rapid_grid, ...
+                        Kern    = -1/(2*pi)*obj.TBA.getScatteringRapidDeriv( t_array(1,ti), obj.x_grid(xi), obj.rapid_grid, ...
                                                                             permute(gamma, [4 2 5 1 3]) , obj.type_grid, obj.type_aux );
-                        Kern_dr = obj.TBA.applyDressing(Kern, theta_t{ti}.getX(xi), t_array(ti));
+                        Kern_dr = obj.TBA.applyDressing(Kern, theta_t{1,ti}.getX(xi), t_array(1,ti));
                         integr  = Kern_dr * obj.interp2Gamma(corr_prod.getX(xi) , gamma); % sum over gamma via multiplication (equal to sum over rapid2 and type2) 
                     end
                     W1          = W1 + dx*integr;
                     
                     % Calculate second source term, W2
-                    W2          = - heaviside( u_t{ti}.getX(xi,'d') - obj.x_grid(yi) ) .* W2_temp_sdr;
+                    W2          = - heaviside( U_t{ti}.getX(xi,'d') - obj.x_grid(yi) ) .* W2_temp_sdr;
 
                     % Solve for Delta (indirect propagator)
-                    IM_u        = obj.interp2u( IM, u_t{ti}.getX(xi) ); % evaluate a_eff0 at x = u(t_corr, x_corr, lambda)
+                    IM_u        = obj.interp2u( IM{ti}, U_t{ti}.getX(xi) ); % evaluate a_eff0 at x = u(t_corr, x_corr, lambda)
 
-                    kernel      = 1/(2*pi)*obj.TBA.getScatteringRapidDeriv( t_array(ti), obj.x_grid(xi), obj.rapid_grid, ...
+                    kernel      = 1/(2*pi)*obj.TBA.getScatteringRapidDeriv( t_array(1,ti), obj.x_grid(xi), obj.rapid_grid, ...
                                                                             obj.rapid_aux , obj.type_grid, obj.type_aux );
                     Id          = iFluidTensor( obj.N, 1, obj.Ntypes, obj.N, obj.Ntypes, 'eye');
 
-                    U           = Id + kernel.*transpose( obj.rapid_w.*theta_t{ti}.getX(xi) ); % CHANGED SIGN
+                    U           = Id + kernel.*transpose( obj.rapid_w.*theta_t{1,ti}.getX(xi) ); % CHANGED SIGN
 
-                    vec         = rhoS_t{ti}.getX(xi) .* f_tx;
+                    vec         = rhoS_t{1,ti}.getX(xi).*f_t1_x;
                     Ymat        = Id.*(1 + 2*pi*dx*IM_u.*vec) - 2*pi*dx*IM_u.*inv(U).*transpose(vec); % vec should be transposed for consistency!!
                     
                     Delta       = Ymat\(2*pi*IM_u.*(W1+W2+W3)); % Solve integral equation through iteration
                     
                     % IMPORTANT! update W3 for next step
                     integr      = vec .* Delta;
-                    integr_sdr  = obj.TBA.applyDressing( integr, theta_t{ti}.getX(xi), t_array(ti)) - integr; % should be (1xNxM)
+                    integr_sdr  = obj.TBA.applyDressing( integr, theta_t{1,ti}.getX(xi), t_array(1,ti)) - integr; % should be (1xNxM)
                     W3          = W3 + dx*integr_sdr;         
 
                     % Calculate indirect contribution via Delta
-                    indir_temp = Delta.*rho_t{ti}.getX(xi).*f_tx.*VO1_t{ti-1}.getX(xi);
-                    indirect(xi,yc,ti-1) = sum( obj.rapid_w .* sum(indir_temp, 3) ,1, 'd'); % integrate over rapidity and sum over type
+                    indir_temp = Delta.*rho_t{1,ti}.getX(xi).*f_t1_x.*VO_t{1,ti}.getX(xi);
+                    indirect(xi,yc,ti) = sum( obj.rapid_w .* sum(indir_temp, 3) ,1, 'd'); % integrate over rapidity and sum over type
                 end
                 
                 yc = yc + 1;
                 
                 % show progress
-                Ndone = (yc-1) + (ti-2)*Nysteps;
+                Ndone = (yc-1) + (ti-1)*Nysteps;
                 cpb_text = sprintf('%d/%d iterations done', Ndone, Ntsteps*Nysteps);
                 cpb.setValue(Ndone/Ntsteps/Nysteps);
                 cpb.setText(cpb_text);
@@ -386,36 +384,42 @@ methods (Access = private)
     end
     
     
-    function IM = calcStateInhomogeniety( obj, theta_0, rho_0 )
+    function IM_t = calcStateInhomogeniety( obj, theta_t, rho_t )
         % Calculate the inhomogeneity of the initial state by taking a
-        % numerical derivative of theta_0
+        % numerical derivative of theta
         
         x_g     = permute(obj.x_grid, [2 1]);
         x_fine  = linspace( x_g(1), x_g(end), 3*(length(x_g)-1)+1 );
         
-        IM      = zeros(size(theta_0));
+        IM_t    = cell(1, length(theta_t));
         
-        for i = 1:obj.Ntypes
-            t0i     = theta_0.getType(i,'d');
-            r0i     = rho_0.getType(i,'d');
-            
-            % make sure spatial index is first
-            t0i     = permute(t0i, [2 1]);
-            r0i     = permute(r0i, [2 1]);
-            
-            % interpolate to a finer grid to help improve gradient accuracy
-            t_int   = interp1(x_g, t0i, x_fine, 'makima');
-            r_int   = interp1(x_g, r0i, x_fine, 'makima');
-            
-            [~,grad]= gradient(t_int, 0, x_fine);
-            IM_temp = grad./(eps + 2*pi*r_int.*obj.TBA.getStatFactor(t_int));
-            IM_temp(isnan(IM_temp)) = 0;
-            IM_temp = permute(IM_temp, [2 1]);
-            
-            IM(:,:,i) = IM_temp(:, 1:3:end);
+        for j = 1:length(theta_t)    
+            theta = theta_t{j};
+            rho = rho_t{j};
+            IM  = zeros(size(theta));
+
+            for i = 1:obj.Ntypes
+                t0i     = theta.getType(i,'d');
+                r0i     = rho.getType(i,'d');
+
+                % make sure spatial index is first
+                t0i     = permute(t0i, [2 1]);
+                r0i     = permute(r0i, [2 1]);
+
+                % interpolate to a finer grid to help improve gradient accuracy
+                t_int   = interp1(x_g, t0i, x_fine, 'makima');
+                r_int   = interp1(x_g, r0i, x_fine, 'makima');
+
+                [~,grad]= gradient(t_int, 0, x_fine);
+                IM_temp = grad./(eps + 2*pi*r_int.*obj.TBA.getStatFactor(t_int));
+                IM_temp(isnan(IM_temp)) = 0;
+                IM_temp = permute(IM_temp, [2 1]);
+
+                IM(:,:,i) = IM_temp(:, 1:3:end);
+            end
+
+            IM_t{j} = iFluidTensor(IM);
         end
- 
-        IM = iFluidTensor(IM);
     end
     
     
