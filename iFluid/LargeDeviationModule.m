@@ -111,82 +111,25 @@ methods (Access = public)
         for ti = 1:Nt
             
             % Calculate gradient of characteristic U
-            dUdr_t = zeros(obj.N, obj.M, obj.Ntypes);
+            dUdr = zeros(obj.N, obj.M, obj.Ntypes);
             for i = 1:obj.Ntypes
-                [~, dUdr_t(:,:,i)] = gradient(U_t{ti}.getType(i,'d'), 0, obj.rapid_grid);
+                [~, dUdr(:,:,i)] = gradient(U_t{ti}.getType(i,'d'), 0, obj.rapid_grid);
             end
-            dUdr_t      = iFluidTensor( dUdr_t );
+            dUdr = iFluidTensor( dUdr );
         
-            yc          = 1; % y_count
+            yc   = 1; % y_count
             
             for yi = y_indices
-                                
-                theta_t2_y  = theta_t{2,ti}.getX(yi);
-                f_t2_y      = obj.TBA.getStatFactor(theta_t2_y);
-                VO2_y       = VO_t{2,ti}.getX(yi);
-
-                corr_prod   = rhoS_t{1,ti}.*theta_t2_y.*f_t2_y.*VO2_y./abs(dUdr_t); 
-
-                % Calculate source terms required for indirect propagator
-                W2_temp    = rhoS_t{2,ti}.getX(yi).*f_t2_y.*VO2_y;  
-                W2_temp_dr = obj.TBA.applyDressing( W2_temp, theta_t2_y, t_array(2,ti) ); 
-                W2_temp_sdr= W2_temp_dr - W2_temp;
-                
-                
-                W1         = 0;
-                W2         = 0;
-                W3         = 0;
-                
-                % Iterate over x-grid, starting at x_0 where source is zero
-                for xi = 1:obj.M
-                    dx          = obj.x_grid(2) - obj.x_grid(1);
-                    f_t1_x      = obj.TBA.getStatFactor(theta_t{1,ti}.getX(xi));
-                    gamma       = obj.findRootSet( U_t{ti}.getX(xi), obj.x_grid(yi), dUdr_t.getX(xi) );
-
-                    % Calculate contribution from direct propagator
-                    direct_temp = obj.interp2Gamma( corr_prod.getX(xi).*VO_t{1,ti}.getX(xi), gamma);
-                    direct(xi,yc,ti) = sum( sum(direct_temp,3) ,1, 'd'); % sum over gamma (rapid1 and type1)
-
-                    
-                    % ----- Calculate indirect propagator ------
-
-                    % Update First source term, W1 
-                    if isempty(gamma)
-                        integr = 0;
-                    else
-                        Kern    = -1/(2*pi)*obj.TBA.getScatteringRapidDeriv( t_array(1,ti), obj.x_grid(xi), obj.rapid_grid, ...
-                                                                            permute(gamma, [4 2 5 1 3]) , obj.type_grid, obj.type_aux );
-                        Kern_dr = obj.TBA.applyDressing(Kern, theta_t{1,ti}.getX(xi), t_array(1,ti));
-                        integr  = Kern_dr * obj.interp2Gamma(corr_prod.getX(xi) , gamma); % sum over gamma via multiplication (equal to sum over rapid2 and type2) 
-                    end
-                    W1          = W1 + dx*integr;
-                    
-                    % Calculate second source term, W2
-                    W2          = - heaviside( U_t{ti}.getX(xi,'d') - obj.x_grid(yi) ) .* W2_temp_sdr;
-
-                    % Solve for Delta (indirect propagator)
-                    IM_u        = obj.interp2u( IM{ti}, U_t{ti}.getX(xi) ); % evaluate a_eff0 at x = u(t_corr, x_corr, lambda)
-
-                    kernel      = 1/(2*pi)*obj.TBA.getScatteringRapidDeriv( t_array(1,ti), obj.x_grid(xi), obj.rapid_grid, ...
-                                                                            obj.rapid_aux , obj.type_grid, obj.type_aux );
-                    Id          = iFluidTensor( obj.N, 1, obj.Ntypes, obj.N, obj.Ntypes, 'eye');
-
-                    U           = Id + kernel.*transpose( obj.rapid_w.*theta_t{1,ti}.getX(xi) ); % CHANGED SIGN
-
-                    vec         = rhoS_t{1,ti}.getX(xi).*f_t1_x;
-                    Ymat        = Id.*(1 + 2*pi*dx*IM_u.*vec) - 2*pi*dx*IM_u.*inv(U).*transpose(vec); % vec should be transposed for consistency!!
-                    
-                    Delta       = Ymat\(2*pi*IM_u.*(W1+W2+W3)); % Solve integral equation through iteration
-                    
-                    % IMPORTANT! update W3 for next step
-                    integr      = vec .* Delta;
-                    integr_sdr  = obj.TBA.applyDressing( integr, theta_t{1,ti}.getX(xi), t_array(1,ti)) - integr; % should be (1xNxM)
-                    W3          = W3 + dx*integr_sdr;         
-
-                    % Calculate indirect contribution via Delta
-                    indir_temp = Delta.*rho_t{1,ti}.getX(xi).*f_t1_x.*VO_t{1,ti}.getX(xi);
-                    indirect(xi,yc,ti) = sum( obj.rapid_w .* sum(indir_temp, 3) ,1, 'd'); % integrate over rapidity and sum over type
-                end
+                % Scan over x to calculate correlations
+                [dir, indir] = obj.integrateLeftToRight(theta_t{1,ti}, theta_t{2,ti}, ...
+                                                        rhoS_t{1,ti}, rhoS_t{2,ti}, ...
+                                                        VO_t{1,ti}, VO_t{2,ti}, ...
+                                                        U_t{ti}, dUdr, ...
+                                                        t_array(1,ti), t_array(2,ti), ...
+                                                        IM{ti}, yi);            
+  
+                direct(:,yc,ti) = dir;
+                indirect(:,yc,ti) = indir;
                 
                 yc = yc + 1;
                 
@@ -486,6 +429,88 @@ methods (Access = private)
         mat_int = permute(mat_int, [2 1 3] );
         
         tensor_int = iFluidTensor(mat_int);
+    end
+    
+    
+    function [direct, indirect] = integrateLeftToRight(obj, ...
+                                                       theta_t1, theta_t2, ...
+                                                       rhoS_t1, rhoS_t2, ...
+                                                       VO_t1, VO_t2, ...
+                                                       U, dUdr, ...
+                                                       t1, t2, ...
+                                                       IM, yi)
+        % Calculate <O1(x,t1) O2(y,t2)> for all values of x by integrating
+        % from left to right.
+        
+        % Calculate quantities constant for all values of x
+        rho_t1      = theta_t1.*rhoS_t1;
+        f_t2_y      = obj.TBA.getStatFactor(theta_t2.getX(yi));
+        corr_prod   = rhoS_t1.*theta_t2.getX(yi).*f_t2_y.*VO_t2.getX(yi)./abs(dUdr);
+        
+
+        % Calculate source terms required for indirect propagator
+        W2_temp    = rhoS_t2.getX(yi).*f_t2_y.*VO_t2.getX(yi);  
+        W2_temp_dr = obj.TBA.applyDressing( W2_temp, theta_t2.getX(yi), t2 ); 
+        W2_temp_sdr= W2_temp_dr - W2_temp;
+        
+        
+        W1      = 0;
+        W2      = 0;
+        W3      = 0;
+        
+        direct  = zeros(obj.M, 1);
+        indirect= zeros(obj.M, 1);
+
+        for xi = 1:obj.M
+            dx          = obj.x_grid(2) - obj.x_grid(1);
+            f_t1_x      = obj.TBA.getStatFactor(theta_t1.getX(xi));
+            gamma       = obj.findRootSet( U.getX(xi), obj.x_grid(yi), dUdr.getX(xi) );
+
+            % ----- Calculate direct propagator ------
+            direct_temp = obj.interp2Gamma( corr_prod.getX(xi).*VO_t1.getX(xi), gamma);
+            direct(xi) = sum( sum(direct_temp,3) ,1, 'd'); % sum over gamma (rapid1 and type1)
+
+
+            % ----- Calculate indirect propagator ------
+
+            % Update First source term, W1 
+            if isempty(gamma)
+                integr = 0;
+            else
+                Kern    = -1/(2*pi)*obj.TBA.getScatteringRapidDeriv( t1, obj.x_grid(xi), obj.rapid_grid, ...
+                                                                    permute(gamma, [4 2 5 1 3]) , obj.type_grid, obj.type_aux );
+                Kern_dr = obj.TBA.applyDressing(Kern, theta_t1.getX(xi), t1);
+                integr  = Kern_dr * obj.interp2Gamma(corr_prod.getX(xi) , gamma); % sum over gamma via multiplication (equal to sum over rapid2 and type2) 
+            end
+            W1          = W1 + dx*integr;
+
+            % Calculate second source term, W2
+            W2          = - heaviside( U.getX(xi,'d') - obj.x_grid(yi) ) .* W2_temp_sdr;
+
+            % Solve for Delta (indirect propagator)
+            IM_u        = obj.interp2u( IM, U.getX(xi) ); % evaluate a_eff0 at x = u(t_corr, x_corr, lambda)
+
+            kernel      = 1/(2*pi)*obj.TBA.getScatteringRapidDeriv( t1, obj.x_grid(xi), obj.rapid_grid, ...
+                                                                    obj.rapid_aux , obj.type_grid, obj.type_aux );
+            Id          = iFluidTensor( obj.N, 1, obj.Ntypes, obj.N, obj.Ntypes, 'eye');
+
+            Umat        = Id + kernel.*transpose( obj.rapid_w.*theta_t1.getX(xi) ); 
+
+            vec         = rhoS_t1.getX(xi).*f_t1_x;
+            Ymat        = Id.*(1 + 2*pi*dx*IM_u.*vec) - 2*pi*dx*IM_u.*inv(Umat).*transpose(vec); % vec should be transposed for consistency!!
+
+            Delta       = Ymat\(2*pi*IM_u.*(W1+W2+W3)); % Solve integral equation through iteration
+
+            % IMPORTANT! update W3 for next step
+            integr      = vec .* Delta;
+            integr_sdr  = obj.TBA.applyDressing( integr, theta_t1.getX(xi), t1) - integr; % should be (1xNxM)
+            W3          = W3 + dx*integr_sdr;         
+
+            % Calculate indirect contribution via Delta
+            indir_temp  = Delta.*rho_t1.getX(xi).*f_t1_x.*VO_t1.getX(xi);
+            indirect(xi)= sum( obj.rapid_w .* sum(indir_temp, 3) ,1, 'd'); % integrate over rapidity and sum over type
+        end
+        
     end
     
 end % end private methods
