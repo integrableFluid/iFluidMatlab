@@ -14,6 +14,8 @@ The complete iFluid documentation can be found [here!](https://integrablefluid.g
 
 [SciPost Phys. Core 3, 016 (2020)](https://scipost.org/SciPostPhysCore.3.2.016)
 
+[Phys. Rev. Lett. 126, 090602 (2021)](https://doi.org/10.1103/PhysRevLett.126.090602)
+
 ## References
 iFluid uses the following scripts for utility purposes. They can be found in the \utils folder.
 
