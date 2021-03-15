@@ -49,7 +49,8 @@ methods (Access = public)
         R           = (I - theta.*T)./rhoS;  
         DT          = rhoS.^(-2).*(I.*w - W);
         
-        D           = inv(R)*(obj.rapid_w.* ( DT*(R.*obj.rapid_w)));
+%         D           = inv(R)*( obj.rapid_w.*( DT*(R.*obj.rapid_w)));
+        D           = inv(R)*( obj.rapid_w.*( DT*(R)));
         
         [dx_rho,~]  = gradient(double(rho), obj.x_grid, obj.rapid_grid);
         dx_rho      = iFluidTensor(dx_rho);

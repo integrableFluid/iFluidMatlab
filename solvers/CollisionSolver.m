@@ -245,12 +245,6 @@ methods (Access = protected)
     end
     
     
-end % end protected methods
-
-
-methods (Access = private)
-    
-
     function Qint = interp2map(obj, Q, map)
         % =================================================================
         % Purpose : Takes a quantity Q defined on rapidity grid and
@@ -361,6 +355,8 @@ methods (Access = private)
 
     end
     
-end % end private methods
+    
+end % end protected methods
+
 
 end % end classdef

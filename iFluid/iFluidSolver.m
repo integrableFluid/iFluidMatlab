@@ -85,7 +85,10 @@ methods (Access = public)
             fn = fieldnames(Options);
             for i = 1:length(fn)                      
                 if isprop(obj, fn{i}) % only copy field if defined among properties
+                    try
                     eval(['obj.',fn{i},' = Options.',fn{i},';']);
+                    catch
+                    end
                 end
             end
         end

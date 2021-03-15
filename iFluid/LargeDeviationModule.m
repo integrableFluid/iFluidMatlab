@@ -156,7 +156,6 @@ methods (Access = public)
         %           W          -- Rapidity characteristics.
         % =================================================================
         
-        
         % Initialize characteristics
         U_init      = iFluidTensor( repmat( obj.x_grid, obj.N, 1, obj.Ntypes) );
         W_init      = iFluidTensor( repmat( obj.rapid_grid, 1, obj.M, obj.Ntypes) );
@@ -198,18 +197,188 @@ methods (Access = public)
                 end
             end          
             
-        end
-        
-    
+        end    
     end
     
     
+    function epsilon = solveFlowEquation(obj)
+        % Work in progress!! A couple of notes regarding this function:
+        %
+        % - For a better notation, we use T instead of t'
+        % - tau_array contains tau in [0 t]
+        % - For now, assume T = t. In order to get the characteristic from
+        %   tau to T, we need to know all the states inbetween, so we might
+        %   as well compute all the epsilons inbetween while were all it.
+        % - Instead of incorporating s into the existing iFluidTensor
+        %   structure, we treat it like a time index, namely by storing 
+        %   iFluidTensor objects in a cell array. From now on, s will be
+        %   the first index of the cell array, while time will be the
+        %   second index. Once this function is working, I might go back
+        %   and polish the implementation a bit.
+        
+        ds_array    = diff(s_array); 
+            
+        error_rel   = 1;
+        count       = 0;
+        eps_old     = cell(1:length(ds_array)); % dont update eps0
+        eps_old(:)  = {eps0}; % set starting guess as for all s>0 as eps(s=0) 
+
+        while any(error_rel > obj.tolerance) & count < obj.maxcount
+
+            eps = eps_0 + ds_array.*cumsum( flowIteration(eps_old) );
+
+
+            % calculate error
+            v1          = flatten(eps);
+            v2          = flatten(eps_old);
+
+            sumeff      = sum( v1.^2 ,1);            
+            error_rel   = squeeze(sum( (v1 - v2).^2, 1)./sumeff);
+            eps_old     = eps;
+
+            count       = count+1;
+        end
+        
+        
+        epsilon = [eps0, eps];
+        
+        
+        
+        function eps_next = flowIteration(eps_prev)
+            % I put all of this in a nested function to avoid clutter in
+            % the main iteration loop. Will need to test if this negatively
+            % affects performance. Possibly there is a large overhead, but
+            % it remains to be seen ....
+            
+            
+            % When evaluating the couplings, should one take the starting
+            % or the ending time?? I assume the ending time here ...
+            
+            % First index is start time (t1), second index is end time (t2)
+            % Note: t2 >= t1
+            Nt          = length(t_array);
+            
+            theta_tt    = cell(Nt, Nt);
+            rho_tt      = cell(Nt, Nt);
+            rhoS_tt     = cell(Nt, Nt);
+            U_tt        = cell(Nt, Nt);
+            eps_next    = cell(Nt, Nt);
+            
+            
+            % Calculate theta and rho for all time combinations
+            for i = 1:Nt % starting times
+                for j = i:Nt % ending times
+                    theta           = obj.TBA.calcFillingFraction(eps_prev{i,j});
+                    [rho, rhoS]     = obj.TBA.transform2rho(theta, t_array(j));
+                    
+                    theta_tt{i,j}   = theta;
+                    rho_tt{i,j}     = rho;
+                    rhoS_tt{i,j}    = rhoS;
+                    U_tt{i,j}       = U;
+                end
+                
+                
+                U_tt(i,:) = obj.calcCharacteristics(theta_tt(i,i:Nt), t_array(i:Nt), 1);
+            end
+            
+            TERM2       = 0;
+            
+            for i = 1:Nt
+                for j = i:Nt
+                    % Get characteristic and calculate derivative
+                    U       = U_tt{i, j}; 
+                    dUdr    = zeros(obj.N, obj.M, obj.Ntypes);
+                    for k = 1:obj.Ntypes
+                        [~, dUdr(:,:,k)] = gradient(U.getType(k,'d'), 0, obj.rapid_grid);
+                    end
+                    dUdr    = iFluidTensor( dUdr );
+
+
+                    % Calculate the quantities needed for the first term
+                    TERM1 = 0;
+                    tau_star = obj.findRootSetTime(U, obj.x_grid(y_idx), t_array(i)); % output has size (Nroots,1,Ntypes)
+
+                    % NOTE!!: For now we completely ignore multiple types in
+                    % tau_star. Let's just get it to work for hard rods and LL
+                    % first.
+
+                    for j = 1:size(tau_star,1) 
+                        % interpolate theta to the time tau_star
+                        theta_star  = obj.interpTime(tau_array, theta_tt.getX(y_idx), tau_star(j,:,:));
+
+                        v_eff       = obj.TBA.calcEffectiveVelocities(theta_star, tau_star(j,:,:));
+                        h           = obj.TBA.getOneParticleEV( c_idx, tau_star(j,:,:), obj.x_grid(y_idx), obj.rapid_grid);               
+                        hn_dr       = obj.TBA.applyDressing(h, theta_star, tau_star(j,:,:));
+
+
+                        % How to take sgn() of v_eff?? Cant take eigenvalue, so
+                        % I guess its just the regular sign function (????)
+                        TERM1 = TERM1 - sign(double(v_eff)).*hn_dr;
+                    end
+
+
+
+
+                    % Calculating the remaining quantities for the second term
+                    [~,~,~,Vj] = obj.TBA.calcCharges(c_idx, theta_tt{i}, tau_array(i), true);
+                    IM = obj.calcStateInhomogeniety( theta_tt{i}, rho_tau{i} );
+
+
+                    [~,~,Delta] = obj.integrateLeftToRight(theta_T, theta_tt{i}, ...
+                                                           rhoS_T, rhoS_tau{i}, ...
+                                                           Vj, Vj, ...
+                                                           U, dUdr, ...
+                                                           T, tau_array(i), ...
+                                                           IM, y_idx);
+
+
+                    TERM2 = TERM2 - dt*Delta; % one more step in integration
+                    eps_next{i} = TERM1 + TERM2;
+                end
+            end
+            
+        end
+        
+        
+    end
+    
+    
+    function tensor_int = interpTime(obj, t_array, tensor_t, t_int)
+        % public for the purpose of testing. Make private later
+        % First version. Very naiive. Assume t_int is inside t_array
+        % endpoints. Then find two entries in t_array around t_int and do a
+        % linear interpolation between tensor at these two points.
+        
+        assert( all(t_int > t_array(1)) )
+        assert( all(t_int < t_array(end)) )
+        
+        for i = 1:length(t_int)
+            % Find entry in t_array lower than t_int
+            [t_low, idx]    = max( t_array(t_array < t_int(i)) );
+            t_high          = t_array(idx+1);
+            
+            dt              = t_high - t_low; % difference in grid
+            s               = (t_high - t_int(i))/dt; % fractional difference to high
+            
+            tensor_temp     = (1-s)*tensor_t{idx+1} + s*tensor_t{idx};
+            
+            if length(t_int) == 1
+                tensor_int = tensor_temp;
+            else
+                tensor_int{i} = tensor_temp;
+            end
+            
+        end
+        
+    end
+    
+     
 end % end public methods
 
 
 methods (Access = private)
 
-    function gamma = findRootSet(obj, u_xt, y, du_xt)
+    function gamma = findRootSetRapid(obj, u_xt, y, du_xt)
         % Finds gamma such that u(x,t,gamma) = u_xt(gamma) = y
         
         u_xt    = double(u_xt);
@@ -271,6 +440,77 @@ methods (Access = private)
         for i = 1:obj.Ntypes
             Nroots      = length( gamma_c{i} );
             gamma( 1:Nroots, :, i ) = gamma_c{i};
+        end
+    end
+    
+    
+    function tau = findRootSetTime(obj, U, y, tstart_array)
+        % TODO: TEST THIS FUNCTION!
+        
+        % Finds tau such that U(x,t,lambda,tau) = y
+        % Input U should be cell-array with all U having same ending time
+        % but variable starting time.
+        
+        tau_cell = cell(1, obj.Ntypes);
+
+        % Unpack U (cell-array) into 4d-array (starttime,rapid,space,type)
+        U_arr = zeros(obj.N, obj.M, obj.Ntypes, length(U));
+        for i = 1:length(U)
+            U_arr = double(U{i});
+        end
+        U_arr = permute(U_arr, [4, 1, 2, 3]);
+        [~,dU_dt] = gradient(U_arr, tstart_array);
+        
+        for i = 1:obj.Ntypes
+            U_i = U_arr(:,:,:,i); % get U for this type
+            dU_i = dU_dt(:,:,:,i); % get dU_dt for this type
+            
+            % Turn U into continuous, anonymous function for finding roots
+            % NOTE: If fzero fails, it is often due to extrapolation. Thus, Try
+            % different algorithms for interp1!
+            U_func = @(t) interp1(tstart_array, U_i, t, 'linear','extrap');
+
+            if all( dU_i < 0) || all( dU_i > 0)
+                % If du_dt is monotonic, the root set contains only a 
+                % single member.
+
+                tau_i = fzero(@(x) U_func(x) - y, 0);
+            else
+                % Multiple members in root set. Use sign flip to gauge how
+                % many there are. 
+                % NOTE: does not take into account U = y continuously
+                
+                % Check "bulk" of u for crossings with y
+                signflip    = diff( U_i(2:end-1,:,:) - y >=0 ) ~= 0; % logical N-3 length vector indicating signflips
+                
+                % Check if edge-points are equal to y
+                first       = abs( U_i(1,:,:) - y ) < 1e-10;
+                last        = abs( U_i(end,:,:) - y ) < 1e-10;
+                
+                t_flip      = tstart_array( [first ; signflip; false; last] ); 
+                Nroots      = length( t_flip ); % number of 1's in t_flip
+                tau_i       = zeros(1,Nroots);
+
+                for j = 1:Nroots
+                    tau_i(j) = fzero(@(x) U_func(x) - y, t_flip(j));
+                end    
+                
+                % Enforce uniquesnes of roots
+                tau_i     = unique(tau_i);
+            end
+            
+            tau_cell{i} = tau_i;
+        end
+        
+        % Some species might have more roots than others! To return gamma
+        % as matrix, one each gamma_i must have same length. Thus, fill
+        % with NaN to obtain equal length.
+        maxroots    = max( cellfun(@length, tau_cell) );
+        tau         = NaN(maxroots, 1, obj.Ntypes);
+        
+        for i = 1:obj.Ntypes
+            Nroots      = length( tau_cell{i} );
+            tau( 1:Nroots, :, i ) = tau_cell{i};
         end
     end
     
@@ -432,7 +672,7 @@ methods (Access = private)
     end
     
     
-    function [direct, indirect] = integrateLeftToRight(obj, ...
+    function [direct, indirect, Delta] = integrateLeftToRight(obj, ...
                                                        theta_t1, theta_t2, ...
                                                        rhoS_t1, rhoS_t2, ...
                                                        VO_t1, VO_t2, ...
@@ -460,11 +700,12 @@ methods (Access = private)
         
         direct  = zeros(obj.M, 1);
         indirect= zeros(obj.M, 1);
+        Delta   = zeros(obj.N, obj.M, obj.Ntypes);
 
         for xi = 1:obj.M
             dx          = obj.x_grid(2) - obj.x_grid(1);
             f_t1_x      = obj.TBA.getStatFactor(theta_t1.getX(xi));
-            gamma       = obj.findRootSet( U.getX(xi), obj.x_grid(yi), dUdr.getX(xi) );
+            gamma       = obj.findRootSetRapid( U.getX(xi), obj.x_grid(yi), dUdr.getX(xi) );
 
             % ----- Calculate direct propagator ------
             direct_temp = obj.interp2Gamma( corr_prod.getX(xi).*VO_t1.getX(xi), gamma);
@@ -499,15 +740,16 @@ methods (Access = private)
             vec         = rhoS_t1.getX(xi).*f_t1_x;
             Ymat        = Id.*(1 + 2*pi*dx*IM_u.*vec) - 2*pi*dx*IM_u.*inv(Umat).*transpose(vec); % vec should be transposed for consistency!!
 
-            Delta       = Ymat\(2*pi*IM_u.*(W1+W2+W3)); % Solve integral equation through iteration
-
+            Delta_x     = Ymat\(2*pi*IM_u.*(W1+W2+W3)); % Solve integral equation through iteration
+            Delta(:,xi,:)= double(Delta_x);
+            
             % IMPORTANT! update W3 for next step
-            integr      = vec .* Delta;
+            integr      = vec .* Delta_x;
             integr_sdr  = obj.TBA.applyDressing( integr, theta_t1.getX(xi), t1) - integr; % should be (1xNxM)
             W3          = W3 + dx*integr_sdr;         
 
             % Calculate indirect contribution via Delta
-            indir_temp  = Delta.*rho_t1.getX(xi).*f_t1_x.*VO_t1.getX(xi);
+            indir_temp  = Delta_x.*rho_t1.getX(xi).*f_t1_x.*VO_t1.getX(xi);
             indirect(xi)= sum( obj.rapid_w .* sum(indir_temp, 3) ,1, 'd'); % integrate over rapidity and sum over type
         end
         
