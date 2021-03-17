@@ -145,58 +145,83 @@ methods (Access = public)
     end
     
     
-    function [U, W] = calcCharacteristics(obj, theta_t, t_array, t_0_idx)
+    function [U, W] = calcCharacteristics(obj, theta_t, t_array, t0_idx)
         % =================================================================
         % Purpose : Calculates the characteristics with starting points 
-        %           t_array(t_0_idx).
+        %           t_array(t0_idx) and ending points in t_array.
         % Input :   theta_t    -- Filling function at times t in t_array.
-        %           t_array    -- Array of times t (gives propagation step).
-        %           t_0_idx    -- Starting indices of t_array.
+        %           t_array    -- Array of times t.
+        %           t0_idx     -- Indices of t_array, corresponding to
+        %                           starting times.
         % Output:   U          -- Position characteristics.
         %           W          -- Rapidity characteristics.
         % =================================================================
+
+        % First, since the state does not change, we compute the effective
+        % velocity at all times to begin with.
+        v_mid     = cell(2, length(t_array)-1); % first row forward, second row backwards
+        a_mid     = cell(2, length(t_array)-1);
         
-        % Initialize characteristics
-        U_init      = iFluidTensor( repmat( obj.x_grid, obj.N, 1, obj.Ntypes) );
-        W_init      = iFluidTensor( repmat( obj.rapid_grid, 1, obj.M, obj.Ntypes) );
-        
-        U           = cell(length(t_0_idx), length(t_array));
-        W           = cell(length(t_0_idx), length(t_array));
-        
-        for i = 1:length(t_0_idx)
-            U{i,t_0_idx(i)} = U_init;
-            W{i,t_0_idx(i)} = W_init;
-        end
-        
-        % Propagate characteristic
-        for n = 1:length(t_array)-1
-            dt          = t_array(n+1) - t_array(n);
-            t_cur       = t_array(n);
-            theta_mid   = (theta_t{n+1} + theta_t{n})/2;
+        for i = 1:length(t_array)-1
+            dt          = t_array(i+1) - t_array(i);
+            t_mid       = (t_array(i+1) - t_array(i))/2;
+            theta_mid   = (theta_t{i+1} + theta_t{i})/2; % estimate midpoint
             
-            [v_e, a_e]  = obj.TBA.calcEffectiveVelocities(theta_mid, t_cur+dt/2);
-            x_mid       = obj.x_grid - 0.5*dt*v_e;
-            r_mid       = obj.rapid_grid - 0.5*dt*a_e; 
+            [v_e, a_e]  = obj.TBA.calcEffectiveVelocities(theta_mid, t_mid);
+            
+            x_mid_for   = obj.x_grid - 0.5*dt*v_e;
+            r_mid_for   = obj.rapid_grid - 0.5*dt*a_e; 
+            
+            x_mid_back  = obj.x_grid + 0.5*dt*v_e;
+            r_mid_back  = obj.rapid_grid + 0.5*dt*a_e; 
 
             % Interpolate v_eff and a_eff to midpoint coordinates x' and rapid' 
-            v_mid       = obj.interpPhaseSpace( v_e, r_mid, x_mid, true );
-            a_mid       = obj.interpPhaseSpace( a_e, r_mid, x_mid, true );
+            v_mid{1,i}  = obj.interpPhaseSpace( v_e, r_mid_for, x_mid_for, true );
+            a_mid{1,i}  = obj.interpPhaseSpace( a_e, r_mid_for, x_mid_for, true );
             
-            % From midpoint velocity calculate fullstep x and rapid translation
-            x_back      = obj.x_grid - dt*v_mid;
-            r_back      = obj.rapid_grid - dt*a_mid;
+            v_mid{2,i}  = obj.interpPhaseSpace( v_e, r_mid_back, x_mid_back, true );
+            a_mid{2,i}  = obj.interpPhaseSpace( a_e, r_mid_back, x_mid_back, true );
+        end
+        
+        
+        % Next, we can initialize the characteristics and propagate them
+        U_init  = iFluidTensor( repmat( obj.x_grid, obj.N, 1, obj.Ntypes) );
+        W_init  = iFluidTensor( repmat( obj.rapid_grid, 1, obj.M, obj.Ntypes) );
+        
+        U       = cell(length(t0_idx), length(t_array));
+        W       = cell(length(t0_idx), length(t_array));
+        
+        
+        % For each starting index, propagate the characteristics forward to
+        % the end of t_array and backwards to the start of t_array
+        for i = 1:length(t0_idx)
+            % Assign initial condition to its corresponding time
+            U{i, t0_idx(i)} = U_init;
+            W{i, t0_idx(i)} = W_init;
             
-            % propagate all characterstics
-            for i = 1:length(t_0_idx)
-                U_prev = U{i,n};
-                W_prev = W{i,n};
+            
+            % Forwards propagation
+            for n = t0_idx(i):(length(t_array)-1)
+                dt          = t_array(n+1) - t_array(n);
                 
-                if ~isempty(U_prev) && ~isempty(W_prev)
-                    U{i,n+1} = obj.interpPhaseSpace(U_prev, r_back, x_back, true);
-                    W{i,n+1} = obj.interpPhaseSpace(W_prev, r_back, x_back, true); 
-                end
-            end          
+                x_back      = obj.x_grid - dt*v_mid{1,n};
+                r_back      = obj.rapid_grid - dt*a_mid{1,n};
+                
+                U{i,n+1}    = obj.interpPhaseSpace(U{i,n}, r_back, x_back, true);
+                W{i,n+1}    = obj.interpPhaseSpace(W{i,n}, r_back, x_back, true); 
+            end
             
+            
+            % Backwards propagation
+            for n = t0_idx(i):(-1):2                
+                dt          = t_array(n-1) - t_array(n);
+                
+                x_back      = obj.x_grid - dt*v_mid{2,n-1};
+                r_back      = obj.rapid_grid - dt*a_mid{2,n-1};
+                
+                U{i,n-1}    = obj.interpPhaseSpace(U{i,n}, r_back, x_back, true);
+                W{i,n-1}    = obj.interpPhaseSpace(W{i,n}, r_back, x_back, true); 
+            end 
         end    
     end
     
@@ -204,11 +229,9 @@ methods (Access = public)
     function epsilon = solveFlowEquation(obj)
         % Work in progress!! A couple of notes regarding this function:
         %
-        % - For a better notation, we use T instead of t'
-        % - tau_array contains tau in [0 t]
-        % - For now, assume T = t. In order to get the characteristic from
-        %   tau to T, we need to know all the states inbetween, so we might
-        %   as well compute all the epsilons inbetween while were all it.
+        % - t_array contains times tau in [0 t]
+        % - The equation solves epsilon(tau)_t for all times in t_array,
+        %   but with fixed time t.
         % - Instead of incorporating s into the existing iFluidTensor
         %   structure, we treat it like a time index, namely by storing 
         %   iFluidTensor objects in a cell array. From now on, s will be
@@ -251,93 +274,118 @@ methods (Access = public)
             % it remains to be seen ....
             
             
-            % When evaluating the couplings, should one take the starting
-            % or the ending time?? I assume the ending time here ...
-            
-            % First index is start time (t1), second index is end time (t2)
-            % Note: t2 >= t1
             Nt          = length(t_array);
             
-            theta_tt    = cell(Nt, Nt);
-            rho_tt      = cell(Nt, Nt);
-            rhoS_tt     = cell(Nt, Nt);
-            U_tt        = cell(Nt, Nt);
-            eps_next    = cell(Nt, Nt);
+            theta_t     = cell(1, Nt);
+            rho_t       = cell(1, Nt);
+            rhoS_t      = cell(1, Nt);
+            eps_next    = cell(1, Nt);
             
             
-            % Calculate theta and rho for all time combinations
-            for i = 1:Nt % starting times
-                for j = i:Nt % ending times
-                    theta           = obj.TBA.calcFillingFraction(eps_prev{i,j});
-                    [rho, rhoS]     = obj.TBA.transform2rho(theta, t_array(j));
-                    
-                    theta_tt{i,j}   = theta;
-                    rho_tt{i,j}     = rho;
-                    rhoS_tt{i,j}    = rhoS;
-                    U_tt{i,j}       = U;
-                end
-                
-                
-                U_tt(i,:) = obj.calcCharacteristics(theta_tt(i,i:Nt), t_array(i:Nt), 1);
+            % Calculate theta and rho for all times
+            for i = 1:Nt 
+                theta           = obj.TBA.calcFillingFraction(eps_prev{i});
+                [rho, rhoS]     = obj.TBA.transform2rho(theta, t_array(i));
+
+                theta_t{i}      = theta;
+                rho_t{i}        = rho;
+                rhoS_t{i}       = rhoS;
             end
             
-            TERM2       = 0;
+            
+            % Calculate some quantities needed for the second term
+            [~,~,~,Vj_t]= obj.TBA.calcCharges(c_idx, theta_t, t_array, true);
+            IM_t        = obj.calcStateInhomogeniety( theta_t, rho_t );
+            V_dummy     = Vj_t{1}; % not needed for the calculation
+            
+            % Calculate characteristic and its derivative
+            U_tt        = obj.calcCharacteristics(theta_t, t_array, 1:length(t_array));
+            dU_tt       = cell(1, Nt);
             
             for i = 1:Nt
-                for j = i:Nt
-                    % Get characteristic and calculate derivative
-                    U       = U_tt{i, j}; 
-                    dUdr    = zeros(obj.N, obj.M, obj.Ntypes);
+                for j = 1:Nt
+                    U           = U_tt{i,j}; 
+                    dUdr        = zeros(obj.N, obj.M, obj.Ntypes);
+
                     for k = 1:obj.Ntypes
                         [~, dUdr(:,:,k)] = gradient(U.getType(k,'d'), 0, obj.rapid_grid);
                     end
-                    dUdr    = iFluidTensor( dUdr );
 
-
-                    % Calculate the quantities needed for the first term
-                    TERM1 = 0;
-                    tau_star = obj.findRootSetTime(U, obj.x_grid(y_idx), t_array(i)); % output has size (Nroots,1,Ntypes)
-
-                    % NOTE!!: For now we completely ignore multiple types in
-                    % tau_star. Let's just get it to work for hard rods and LL
-                    % first.
-
-                    for j = 1:size(tau_star,1) 
-                        % interpolate theta to the time tau_star
-                        theta_star  = obj.interpTime(tau_array, theta_tt.getX(y_idx), tau_star(j,:,:));
-
-                        v_eff       = obj.TBA.calcEffectiveVelocities(theta_star, tau_star(j,:,:));
-                        h           = obj.TBA.getOneParticleEV( c_idx, tau_star(j,:,:), obj.x_grid(y_idx), obj.rapid_grid);               
-                        hn_dr       = obj.TBA.applyDressing(h, theta_star, tau_star(j,:,:));
-
-
-                        % How to take sgn() of v_eff?? Cant take eigenvalue, so
-                        % I guess its just the regular sign function (????)
-                        TERM1 = TERM1 - sign(double(v_eff)).*hn_dr;
-                    end
-
-
-
-
-                    % Calculating the remaining quantities for the second term
-                    [~,~,~,Vj] = obj.TBA.calcCharges(c_idx, theta_tt{i}, tau_array(i), true);
-                    IM = obj.calcStateInhomogeniety( theta_tt{i}, rho_tau{i} );
-
-
-                    [~,~,Delta] = obj.integrateLeftToRight(theta_T, theta_tt{i}, ...
-                                                           rhoS_T, rhoS_tau{i}, ...
-                                                           Vj, Vj, ...
-                                                           U, dUdr, ...
-                                                           T, tau_array(i), ...
-                                                           IM, y_idx);
-
-
-                    TERM2 = TERM2 - dt*Delta; % one more step in integration
-                    eps_next{i} = TERM1 + TERM2;
+                    dU_tt{i,j}  = iFluidTensor( dUdr );
                 end
             end
             
-        end
+           
+            
+            % In order to produce epsilon for some time t', we need to
+            % integrate over all starting times tau from 0 to t.
+            % However, in order to continue with the next iteration and get
+            % the filling for all times tau, we need to vary t' from 0 to t
+            % as well ...
+            % Thus, we need two loops, over the "starting time" and the
+            % "ending time" of the correlations, respectively. As a bonus,
+            % we can take a cummulative sum (integral) instead of the
+            % regular integral, whereby we get epsilon for all ending times
+            % (regular times t') AND starting times t.
+            %
+            % NOTE: A potential MASSIVE speedup can be achieved, if we
+            % manage to find some relation between starting and ending
+            % times of the indirect correlations,
+            %  e.g. Delta(t --> t') = - Delta(t' --> t) or something ...
+            
+            Delta_tt = cell(length(t_array), length(t_array));       
+            for i = 1:Nt % starting times
+                for j = 1:Nt % ending times
+                    [~,~,Delta] = obj.integrateLeftToRight(theta_t{j}, theta_t{i}, ...
+                                                            rhoS_t{j}, rhoS_t{i}, ...
+                                                            V_dummy, Vj_t{i}, ...
+                                                            U_tt{i,j}, dU_tt{i,j}, ...
+                                                            t_array(j), t_array(i), ...
+                                                            IM_t{i}, y_idx);
+                
+                    Delta_tt{i,j} = Delta;
+                end
+            end
+                       
+            % Finally, we can take the integral over the starting index in
+            % order to obtain the second (indirect) term.
+            dt          = t_array(2) - t_array(1); % assume constant spacing
+            eps_indir   = sum(cellfun(@(x) double(x)*dt, Delta_tt), 1);
+            
+            
+            % Next, we calculate the "direct" contribution to epsilon for
+            % all times t' in [0 t].
+            for i = 1:Nt
+                % Find starting time for which U = y
+                % I am still confused by tau_star. It depends both on x',
+                % t', and the rapidity (and the quasi-particle type). 
+                % I guess, it will have to be a (N x M x N_types x Nt)
+                % tensor then ... but how do we interpolate to that??
+                %
+                % Maybe: At the given time (index) of Nt, the given tensor
+                % T is interpolated to the all the values in the tau_star
+                % tensor (???)
+                
+                tau_star = obj.findRootSetTime(U_tt(:,i), obj.x_grid(y_idx), t_array(i));
+
+%                 for j = 1:size(tau_star,1) 
+%                     % interpolate theta to the time tau_star
+%                     theta_star  = obj.interpTime(tau_array, theta_tt.getX(y_idx), tau_star(j,:,:));
+% 
+%                     v_eff       = obj.TBA.calcEffectiveVelocities(theta_star, tau_star(j,:,:));
+%                     h           = obj.TBA.getOneParticleEV( c_idx, tau_star(j,:,:), obj.x_grid(y_idx), obj.rapid_grid);               
+%                     hn_dr       = obj.TBA.applyDressing(h, theta_star, tau_star(j,:,:));
+% 
+% 
+%                     % How to take sgn() of v_eff?? Cant take eigenvalue, so
+%                     % I guess its just the regular sign function (????)
+%                     TERM1 = TERM1 - sign(double(v_eff)).*hn_dr;
+%                 end
+            end
+            
+            
+        end % end nested function
+        
         
         
     end
