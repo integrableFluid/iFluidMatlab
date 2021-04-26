@@ -66,7 +66,7 @@ sax1 = subplot(2,1,1);
 hold on
 box on
 for i = 1:length(sample_idx)
-    plot(x_array, Psi_k_t{sample_idx(i)}(:,3),'LineWidth',1.5)
+    plot(x_array, Psi_k_t(:,3,sample_idx(i)),'LineWidth',1.5)
 end
 ylabel('langle \Phi _{3} \rangle')
 xlabel('x')

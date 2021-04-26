@@ -57,7 +57,7 @@ methods (Access = public)
         dT = -(2.*sin((obj.couplings{1,1}(t,x).*pi)).*cosh((rapid1-rapid2)))./(sinh((rapid1-rapid2)).^2+sin(obj.couplings{1,1}(t,x).*pi).^2);
         
         dT(isnan(dT)) = 0; % removes any NaN
-        dT      = iFluidTensor(dT); % Converts to iFluidTensor
+        dT      = fluidcell(dT); % Converts to iFluidTensor
     end
     
     
@@ -102,7 +102,7 @@ methods (Access = public)
         end
         
         dT(isnan(dT)) = 0; % removes any NaN
-        dT  = iFluidTensor( dT );
+        dT  = fluidcell( dT );
     end
     
     
@@ -152,7 +152,7 @@ methods (Access = public)
                 prefac = 2*sin(pi*obj.couplings{1,1}(t,obj.x_grid)*(2*(0:kmax-1) + 1))/pi;
                 V_temp = cumsum( permute(prefac./Hk, [3 1 2]).*Xi_m.*Xi_p , 3 ).*permute(Psi(:,:,i),[3 1 2])./double(rhoS_t{i});
                 for k = 1:kmax
-                    V_Psi{k,i} = iFluidTensor( V_temp(:,:,k) );
+                    V_Psi{k,i} = fluidcell( V_temp(:,:,k) );
                 end
                 
             end
@@ -176,7 +176,7 @@ methods (Access = private)
         chi         = 1/pi*imag(exp(2*k*1i*pi*obj.couplings{1,1}(t,obj.x_grid))./sinh(sign(sgn)*rapid_arg - 1i*pi*obj.couplings{1,1}(t,obj.x_grid)));
         
         X           = permute(eye(obj.N), [1 3 4 2]) - chi.*transpose(obj.rapid_w.*theta); 
-        epsi        = iFluidTensor(exp(sign(sgn)*obj.rapid_grid));
+        epsi        = fluidcell(exp(sign(sgn)*obj.rapid_grid));
 
         eps         = X\epsi;   
     end

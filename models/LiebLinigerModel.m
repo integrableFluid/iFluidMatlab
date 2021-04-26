@@ -64,7 +64,7 @@ methods (Access = public)
         
         dT(isnan(dT)) = 0; % removes any NaN
         
-        dT      = iFluidTensor(dT); % Converts to iFluidTensor
+        dT      = fluidcell(dT); % Converts to iFluidTensor
     end
     
     
@@ -90,7 +90,7 @@ methods (Access = public)
         end
         
         dT(isnan(dT)) = 0; % removes any NaN
-        dT = iFluidTensor(dT); % Converts to iFluidTensor
+        dT = fluidcell(dT); % Converts to iFluidTensor
     end
     
     
@@ -210,9 +210,9 @@ methods (Access = public)
                 w       = ebare./T;
                 e_eff   = obj.calcEffectiveEnergy(w, 0, obj.x_grid);
                 rho     = calcRho( e_eff );
-                density = sum( obj.rapid_w.*rho, 1, 'd' );
+                density = sum( obj.rapid_w.*rho, 1 );
 
-                NA_i(i) = trapz(obj.x_grid, density);
+                NA_i(i) = trapz(obj.x_grid, double(density));
             end
 
             Natoms  = sum(NA_i); % sum the contributions
@@ -225,8 +225,8 @@ methods (Access = public)
             % Calculate the quasiparticle density
             kernel      = obj.getScatteringRapidDeriv(0, obj.x_grid, obj.rapid_grid, obj.rapid_aux, obj.type_grid, obj.type_aux );
                 
-            rho         = iFluidTensor(obj.N, size(e_eff,2), obj.Ntypes);
-            rho_old     = iFluidTensor(obj.N, size(e_eff,2), obj.Ntypes);
+            rho         = fluidcell.zeros(obj.N, size(e_eff,2), obj.Ntypes);
+            rho_old     = fluidcell.zeros(obj.N, size(e_eff,2), obj.Ntypes);
             error_rel   = 1;
             count       = 0;
 
@@ -408,7 +408,7 @@ methods (Access = public)
         v_eff   = de_dr./dp_dr;
         
         if obj.homoEvol % if homogeneous couplings, acceleration = 0
-            a_eff = iFluidTensor( zeros(size( v_eff )) );
+            a_eff = fluidcell.zeros( size(v_eff) );
             return
         end
         
@@ -421,7 +421,7 @@ methods (Access = public)
                 a_eff_mu = repmat(a_eff_mu, length(rapid), 1); 
             end
         end
-        a_eff_mu = iFluidTensor(a_eff_mu);
+        a_eff_mu = fluidcell(a_eff_mu);
         
         % Calculate acceleration from inhomogenous interaction
         a_eff_c = 0;
@@ -535,13 +535,12 @@ methods (Access = public)
         % Output:   B     -- cell array of all B_i funcs up to order 2*n-1
         % =================================================================
         b       = cell( 1 , 2*n - 1 + 2); % added two dummy indices
-        b(:)    = {iFluidTensor( obj.N , obj.M)};
+        b(:)    = {fluidcell.zeros( obj.N , obj.M)};
         
         kernel1 = -1/(2*pi)*obj.getScatteringRapidDeriv(t, obj.x_grid, obj.rapid_grid, obj.rapid_aux, obj.type_grid, obj.type_aux);
         kernel2 = -(obj.rapid_grid - permute(obj.rapid_grid, [4 2 3 1])).*kernel1./obj.couplings{1,2}(t,obj.x_grid);
         
-        I       = iFluidTensor(obj.N, obj.M, obj.Ntypes, obj.N, obj.Ntypes);
-        I.setIdentity();
+        I       = fluidcell.eye(obj.N, obj.Ntypes);
 
         
         X1      = I - kernel1.*transpose(obj.rapid_w.*theta);

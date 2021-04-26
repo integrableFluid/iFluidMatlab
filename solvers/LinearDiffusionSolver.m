@@ -57,7 +57,7 @@ methods (Access = public)
         [rho_BG, rhoS_BG] = obj.coreObj.transform2rho(theta_BG, 0);
         
         % Prepare required quantities
-        I           = iFluidTensor(obj.N, 1, obj.Ntypes, obj.N, obj.Ntypes, 'eye')./obj.rapid_w;
+        I           = fluidcell.eye(obj.N, obj.Ntypes)./obj.rapid_w;
         T           = -1/(2*pi)*obj.coreObj.getScatteringRapidDeriv(0, obj.x_grid, obj.rapid_grid, rapid_aux, obj.type_grid, type_aux);
         T_dr        = obj.coreObj.applyDressing(T, theta_BG, 0);
         v_eff       = obj.coreObj.calcEffectiveVelocities(theta_BG, 0, obj.x_grid, obj.rapid_grid, obj.type_grid);
@@ -84,7 +84,7 @@ methods (Access = public)
         end
         
         Dk = cell(1, length(k_array));
-        I  = iFluidTensor(obj.N, 1, obj.Ntypes, obj.N, obj.Ntypes, 'eye');
+        I  = fluidcell.eye(obj.N, obj.Ntypes);
         
         for i = 1:length(k_array)
             Dk{i} = 1i*k_array(i)*I.*obj.v_BG + diffFlag*k_array(i)^2 * obj.DKernel/2;

@@ -6,6 +6,7 @@ clear all; close all;
 
 % Add paths to iFluid directories
 addpath(['..' filesep 'models' filesep])
+addpath(['..' filesep 'modules' filesep])
 addpath(['..' filesep 'solvers' filesep])
 addpath(['..' filesep 'iFluid' filesep])
 addpath(['..' filesep 'utils' filesep])
@@ -55,7 +56,7 @@ theta_init  = TBA.calcThermalState(T, coup_init);
 %% Calculate correlations
 
 % Initialize object for calculating correlations
-iCorr       = iFluidCorrelator(TBA, []);
+iCorr       = CorrelationModule(TBA, []);
 
 % Calculate form factors of density and associated current
 calcFormFac = true;

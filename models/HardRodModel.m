@@ -50,7 +50,7 @@ methods (Access = public)
     
     function dT = getScatteringRapidDeriv(obj, t, x, rapid1, rapid2, type1, type2)
         dT      = repmat(obj.couplings{1,1}(t,x) , length(rapid1), 1 , 1 , length(rapid2));         
-        dT      = iFluidTensor(dT); % Converts to iFluidTensor
+        dT      = fluidcell(dT); % Converts to iFluidTensor
     end
     
     
@@ -75,7 +75,7 @@ methods (Access = public)
             dT = 0;
         end
 
-        dT = iFluidTensor(dT); % Converts to iFluidTensor
+        dT = fluidcell(dT); % Converts to iFluidTensor
     end
     
       

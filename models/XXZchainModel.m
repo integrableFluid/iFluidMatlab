@@ -75,10 +75,7 @@ methods (Access = public)
             end
         end
         
-        
-        dT = dT1 + dT2 + dT3;
-        
-        dT  = iFluidTensor( dT );
+        dT  = fluidcell( dT1 + dT2 + dT3 );
     end
     
     
@@ -108,7 +105,7 @@ methods (Access = public)
     function dT = getScatteringCouplingDeriv(obj, coupIdx, t, x, rapid1, rapid2, type1, type2)
         if coupIdx == 1 % deriv w.r.t. B
             dT  = 0;
-            dT  = iFluidTensor( dT );
+            dT  = fluidcell( dT );
             return
         end 
         % Else it's deriv w.r.t. theta
@@ -136,15 +133,26 @@ methods (Access = public)
                 end
             end
         end
-        
-        
-        dT = dT1 + dT2 + dT3;
-        
-        dT  = iFluidTensor( dT );
+ 
+        dT  = fluidcell( dT1 + dT2 + dT3 );
     end
     
     
-    
+    function h_i = getOneParticleEV(obj, charIdx, t, x, rapid)
+        % Overload the iFluidCore function, because h_0 counters higher
+        % types as multiple particles.
+        switch charIdx
+        case 0 % eigenvalue of number operator
+            h_i = repmat(obj.type_grid, length(rapid), 1);
+        case 1 % eigenvalue of momentum operator
+            h_i = obj.getBareMomentum(t, x, rapid,  obj.type_grid);
+        case 2 % eigenvalue of Hamiltonian
+            h_i = obj.getBareEnergy(t, x, rapid,  obj.type_grid);
+        otherwise 
+            % Higher order charges must be implemented in specific model
+            error(['Eigenvalue ' num2str(charIdx) ' not implmented!'])
+        end
+    end
     
       
 end % end public methods

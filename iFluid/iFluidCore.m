@@ -200,7 +200,7 @@ methods (Access = public)
         % =================================================================
         switch charIdx
         case 0 % eigenvalue of number operator
-            h_i = repmat(obj.type_grid, length(rapid), 1);
+            h_i = ones(length(rapid), 1, obj.Ntypes);
         case 1 % eigenvalue of momentum operator
             h_i = obj.getBareMomentum(t, x, rapid,  obj.type_grid);
         case 2 % eigenvalue of Hamiltonian
@@ -429,7 +429,7 @@ methods (Access = public)
         a_eff   = 0;
         
         if obj.homoEvol % if homogeneous couplings, acceleration = 0
-            a_eff = iFluidTensor( zeros(size( v_eff )) );
+            a_eff = fluidcell.zeros( size(v_eff) );
             return
         end
         
@@ -465,20 +465,20 @@ methods (Access = public)
         %           t     -- time (scalar)
         % Output:   Q_dr  -- Dressed quantity (iFluidTensor)
         % =================================================================
-        if ~isa(Q, 'iFluidTensor')
-            Q = iFluidTensor(Q);
+        if ~isa(Q, 'fluidcell')
+            Q = fluidcell(Q);
         end
         
         if size(Q,1) == 1
             X = repmat(double(Q), obj.N, 1, obj.Ntypes);
-            Q = iFluidTensor(X);
+            Q = fluidcell(X);
         end
         
         % Calculate dressing operator
         kernel  = 1/(2*pi)*obj.getScatteringRapidDeriv(t, obj.x_grid, obj.rapid_grid, obj.rapid_aux, obj.type_grid, obj.type_aux);
         
-        I       = iFluidTensor(obj.N, 1, obj.Ntypes, obj.N, obj.Ntypes, 'eye');
-        
+        I       = fluidcell.eye(obj.N, obj.Ntypes);
+
         U       = I + kernel.*transpose(obj.rapid_w.*theta);
         
         % We now have the equation Q = U*Q_dr. Therefore we solve for Q_dr
@@ -516,8 +516,8 @@ methods (Access = public)
         % =================================================================
         kernel      = 1/(2*pi)*obj.getScatteringRapidDeriv(t, x, obj.rapid_grid, obj.rapid_aux, obj.type_grid, obj.type_aux );
                 
-        e_eff       = iFluidTensor(obj.N, size(w,2), obj.Ntypes);
-        e_eff_old   = iFluidTensor(obj.N, size(w,2), obj.Ntypes);
+        e_eff       = fluidcell.zeros(obj.N, size(w,2), obj.Ntypes);
+        e_eff_old   = fluidcell.zeros(obj.N, size(w,2), obj.Ntypes);
         error_rel   = 1;
         count       = 0;
         
@@ -584,7 +584,7 @@ methods (Access = public)
         s       = zeros(obj.M, Nsteps);
         
         for i = 1:Nsteps
-            s(:,i) = - squeeze(sum(sum(obj.rapid_w.*rhoS{i}.*( theta{i}.*log(theta{i}) + (1-theta{i}).*log(1-theta{i}) ) ,1,'d'),3));
+            s(:,i) = - squeeze(double(sum(sum(obj.rapid_w.*rhoS{i}.*( theta{i}.*log(theta{i}) + (1-theta{i}).*log(1-theta{i}) ) ,1),3)));
         end
 
     end

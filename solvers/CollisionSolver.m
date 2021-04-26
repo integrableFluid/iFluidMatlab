@@ -270,7 +270,7 @@ methods (Access = private)
             Q_int(:,:,i) = reshape(Q_temp, obj.N, obj.N);
         end
         
-        Qint = iFluidTensor(permute(Q_int, [1 3 4 2]));
+        Qint = fluidcell(permute(Q_int, [1 3 4 2]));
     end
     
     
