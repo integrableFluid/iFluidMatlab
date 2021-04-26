@@ -200,7 +200,7 @@ methods (Access = public)
         % =================================================================
         switch charIdx
         case 0 % eigenvalue of number operator
-            h_i = repmat(obj.type_grid, length(rapid), 1);
+            h_i = ones(length(rapid), 1, obj.Ntypes);
         case 1 % eigenvalue of momentum operator
             h_i = obj.getBareMomentum(t, x, rapid,  obj.type_grid);
         case 2 % eigenvalue of Hamiltonian

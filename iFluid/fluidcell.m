@@ -1,5 +1,42 @@
 classdef fluidcell < matlab.mixin.CustomDisplay
-
+    % Main data structure of iFluid to keep track of the indices. The class
+    % wraps around a 5-dimensional array and overlaods all the standard
+    % matrix operations to generalize them to iFluids index structure.
+    %
+    % ======================== Index convention ===========================
+    %   Index 1: main rapidity index
+    %   Index 2: spatial index (leave unused for homogeneous quantities)
+    %   Index 3: main type index
+    %   Index 4: secondary rapidity index (used for convolutions)
+    %   Index 5: secondary type index (used for convolutions)
+    %
+    % ========================= Initialization ============================
+    %   A = fluidcell( B )
+    %       - initializes a fluidcell with ND-array B as underlying array
+    %
+    %   A = fluidcell.zeros( s1, s2, s3, ... )
+    %   A = fluidcell.zeros( [s1, s2, s3, ...] )
+    %       - initializes a fluidcell of zeros of the specified dimensions
+    %
+    %   A = fluidcell.ones( s1, s2, s3, ... )
+    %   A = fluidcell.ones( [s1, s2, s3, ...] )
+    %       - initializes a fluidcell of ones of the specified dimensions
+    %
+    %   A = fluidcell.eye( s_rapid, s_type )
+    %       - initializes a fluidcell of size (s_rapid,1,s_type,s_rapid,s_type)
+    %         where the entries with matching rapidity index AND type index
+    %         have the value 1, while all others are 0.
+    %
+    % ==================== Referencing and assigning ======================
+    %
+    %   Via indices directly (conventional Matlab style):
+    %       A = B(:,:,3) % gets the 3rd type index
+    %       A(:,2,:) = B % sets the structure at 2nd space index equal to B
+    %
+    %   Via index labels:
+    %       A = B('type',3) % gets the 3rd type index
+    %       A('space',2) = B % sets the structure at 2nd space index equal to B
+    %
     
 properties (Access = public)
     % display properties (not used for storage)
@@ -169,7 +206,7 @@ methods (Access = public)
     %% Constructor
     function obj = fluidcell( x )
         % Initializes an fluidcell wrapping around the input matrix x.
-        if isa(x, 'ifluidcell'); x = double(x); end        
+        if isa(x, 'fluidcell'); x = double(x); end        
         assert( isnumeric(x), 'Input must be a ND-array' )
         assert( ndims(x) <= 5, 'fluidcell can have max 5 dimensions!' )
         
