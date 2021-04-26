@@ -114,8 +114,8 @@ methods (Access = public)
         u_t             = cell(1, Nstored);
         w_t             = cell(1, Nstored);
                                 
-        u_init          = iFluidTensor( repmat( obj.x_grid, obj.N, 1, obj.Ntypes) );
-        w_init          = iFluidTensor( repmat( obj.rapid_grid, 1, obj.M, obj.Ntypes) );
+        u_init          = fluidcell( repmat( obj.x_grid, obj.N, 1, obj.Ntypes) );
+        w_init          = fluidcell( repmat( obj.rapid_grid, 1, obj.M, obj.Ntypes) );
 
         % Initializes the propagation, calculating and internally storing
         % any additional quantities needed for the step-function.
@@ -253,7 +253,7 @@ methods (Access = protected)
         % Reshape back to original indices
         mat_int = permute(mat_int, [2 1 3] );
         
-        tensor_int = iFluidTensor(mat_int);
+        tensor_int = fluidcell(mat_int);
     end
   
     

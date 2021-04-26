@@ -75,10 +75,7 @@ methods (Access = public)
             end
         end
         
-        
-        dT = dT1 + dT2 + dT3;
-        
-        dT  = iFluidTensor( dT );
+        dT  = fluidcell( dT1 + dT2 + dT3 );
     end
     
     
@@ -108,7 +105,7 @@ methods (Access = public)
     function dT = getScatteringCouplingDeriv(obj, coupIdx, t, x, rapid1, rapid2, type1, type2)
         if coupIdx == 1 % deriv w.r.t. B
             dT  = 0;
-            dT  = iFluidTensor( dT );
+            dT  = fluidcell( dT );
             return
         end 
         % Else it's deriv w.r.t. theta
@@ -136,11 +133,8 @@ methods (Access = public)
                 end
             end
         end
-        
-        
-        dT = dT1 + dT2 + dT3;
-        
-        dT  = iFluidTensor( dT );
+ 
+        dT  = fluidcell( dT1 + dT2 + dT3 );
     end
     
     

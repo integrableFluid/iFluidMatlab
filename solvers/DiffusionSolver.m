@@ -38,7 +38,7 @@ methods (Access = public)
         
         theta       = rho./rhoS;
         v_eff       = obj.coreObj.calcEffectiveVelocities(theta, t, obj.x_grid, obj.rapid_grid, obj.type_grid);  
-        I           = iFluidTensor(obj.N, 1, obj.Ntypes, obj.N, obj.Ntypes, 'eye')./obj.rapid_w;
+        I           = fluidcell.eye(obj.N, obj.Ntypes)./obj.rapid_w;
         T           = -1/(2*pi)*obj.coreObj.getScatteringRapidDeriv(t, obj.x_grid, obj.rapid_grid, rapid_aux, obj.type_grid, type_aux);
         T_dr        = obj.coreObj.applyDressing(T, theta, t);     
         f           = obj.coreObj.getStatFactor( theta );
@@ -50,32 +50,8 @@ methods (Access = public)
         DT          = rhoS.^(-2).*(I.*w - W);
         
         D           = inv(R)*(obj.rapid_w.* ( DT*(R.*obj.rapid_w)));
-        
-        [dx_rho,~]  = gradient(double(rho), obj.x_grid, obj.rapid_grid);
-        dx_rho      = iFluidTensor(dx_rho);
-        
-        F           = 0.5*gradient( double( D*(dx_rho) ), obj.x_grid, obj.rapid_grid );
-        
-
-%         %% Try to use formalism from Alvise paper
-%         v_eff       = obj.coreObj.calcEffectiveVelocities(theta, t, obj.x_grid, obj.rapid_grid, obj.type_grid);  
-%         I           = iFluidTensor(obj.N, 1, obj.Ntypes, obj.N, obj.Ntypes, 'eye');
-%         dp          = obj.coreObj.getMomentumRapidDeriv(t, obj.x_grid, obj.rapid_grid, obj.type_grid);
-%         dp_dr       = obj.coreObj.applyDressing(dp, theta, t);
-%         f           = obj.coreObj.getStatFactor( theta );
-%         T           = -1/(2*pi)*obj.coreObj.getScatteringRapidDeriv(t, obj.x_grid, obj.rapid_grid, rapid_aux, obj.type_grid, type_aux);
-%         T_dr        = obj.coreObj.applyDressing(T, theta, t);
-%         
-%         W           = 0.5*(2*pi*T_dr./dp_dr).^2 .* rho.*f.*abs( v_eff - v_eff.t() );
-%         DT          = I.*sum( obj.rapid_w.*(dp_dr./dp_dr.t()).^2 .* W , 1) - W;
-%         R           = 2*pi*(I - T.*theta)./dp_dr;
-%         D           = inv(R)*DT*R;
-%         
-%         [dx_rho,~]  = gradient(double(rho), obj.x_grid, obj.rapid_grid);
-%         dx_rho      = iFluidTensor(dx_rho);
-%         
-%         F           = gradient( double( D*(obj.rapid_w.*dx_rho) ), obj.x_grid, obj.rapid_grid );
-        
+        dx_rho      = gradient(rho, 'x', obj.x_grid);
+        F           = 0.5*gradient( D*(dx_rho), 'x', obj.x_grid );
         
     end
     
