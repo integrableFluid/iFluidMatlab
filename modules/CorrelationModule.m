@@ -1,4 +1,4 @@
-classdef iFluidCorrelator
+classdef CorrelationModule
     % Class for calculating Euler-scale dynamical correlation functions. 
     
     
@@ -28,7 +28,7 @@ end % end private properties
 methods (Access = public)
     
     % constructor
-    function obj = iFluidCorrelator(TBA, Options)       
+    function obj = CorrelationModule(TBA, Options)       
         % iFluidCorrelator requires an iFluidCore object for TBA functions.
         assert( isa( TBA, 'iFluidCore' ) )
         
@@ -89,7 +89,7 @@ methods (Access = public)
         if length(t_array) > 2
             assert( length(VO1_t) == length(theta_t)-1 )
         end
-        assert( isa( VO2_0, 'iFluidTensor' ) )
+        assert( isa( VO2_0, 'fluidcell' ) )
             
         
         direct      = zeros( obj.M, length(y_indices), length(t_array)-1 );
@@ -117,7 +117,7 @@ methods (Access = public)
             for i = 1:obj.Ntypes
                 [~, dudr_t(:,:,i)] = gradient(u_t{ti}.getType(i,'d'), 0, obj.rapid_grid);
             end
-            dudr_t      = iFluidTensor( dudr_t );
+            dudr_t      = fluidcell( dudr_t );
         
             yc          = 1; % y_count
             
@@ -147,7 +147,7 @@ methods (Access = public)
 
                     % Calculate contribution from direct propagator
                     direct_temp = obj.interp2Gamma( corr_prod.getX(xi).*VO1_t{ti-1}.getX(xi), gamma);
-                    direct(xi,yc,ti-1) = sum( sum(direct_temp,3) ,1, 'd'); % sum over gamma (rapid1 and type1)
+                    direct(xi,yc,ti-1) = sum(sum(double(direct_temp),3),1); % sum over gamma (rapid1 and type1)
 
                     
                     % ----- Calculate indirect propagator ------
@@ -164,14 +164,14 @@ methods (Access = public)
                     W1          = W1 + dx*integr;
                     
                     % Calculate second source term, W2
-                    W2          = - heaviside( u_t{ti}.getX(xi,'d') - obj.x_grid(yi) ) .* W2_temp_sdr;
+                    W2          = - heaviside( double(u_t{ti}.getX(xi)) - obj.x_grid(yi) ) .* W2_temp_sdr;
 
                     % Solve for Delta (indirect propagator)
                     IM_u        = obj.interp2u( IM, u_t{ti}.getX(xi) ); % evaluate a_eff0 at x = u(t_corr, x_corr, lambda)
 
                     kernel      = 1/(2*pi)*obj.TBA.getScatteringRapidDeriv( t_array(ti), obj.x_grid(xi), obj.rapid_grid, ...
                                                                             obj.rapid_aux , obj.type_grid, obj.type_aux );
-                    Id          = iFluidTensor( obj.N, 1, obj.Ntypes, obj.N, obj.Ntypes, 'eye');
+                    Id          = fluidcell.eye(obj.N, obj.Ntypes);
 
                     U           = Id + kernel.*transpose( obj.rapid_w.*theta_t{ti}.getX(xi) ); % CHANGED SIGN
 
@@ -187,7 +187,7 @@ methods (Access = public)
 
                     % Calculate indirect contribution via Delta
                     indir_temp = Delta.*rho_t{ti}.getX(xi).*f_tx.*VO1_t{ti-1}.getX(xi);
-                    indirect(xi,yc,ti-1) = sum( obj.rapid_w .* sum(indir_temp, 3) ,1, 'd'); % integrate over rapidity and sum over type
+                    indirect(xi,yc,ti-1) = sum( obj.rapid_w .* sum(double(indir_temp), 3),1); % integrate over rapidity and sum over type
                 end
                 
                 yc = yc + 1;
@@ -279,7 +279,7 @@ methods (Access = private)
         % NOTE: interp1 interpolates each column if ndims > 1
         
         if isempty(gamma)
-            tensor_out = iFluidTensor(0);
+            tensor_out = fluidcell(0);
             return
         end
         
@@ -295,7 +295,7 @@ methods (Access = private)
             mat_out(:,:,i) = int;
         end
 
-        tensor_out  = iFluidTensor(mat_out);
+        tensor_out  = fluidcell(mat_out);
     end
     
     
@@ -322,7 +322,7 @@ methods (Access = private)
             mat_out(:,:,i) = diag( mat_int );
         end
 
-        tensor_out = iFluidTensor(mat_out);
+        tensor_out = fluidcell(mat_out);
     end
     
     
@@ -355,7 +355,7 @@ methods (Access = private)
             IM(:,:,i) = IM_temp(:, 1:3:end);
         end
  
-        IM = iFluidTensor(IM);
+        IM = fluidcell(IM);
     end
     
 end % end private methods
