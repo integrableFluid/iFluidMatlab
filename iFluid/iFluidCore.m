@@ -301,34 +301,44 @@ methods (Access = public)
     end
     
 
-    function [q, j, Vq, Vj] = calcCharges(obj, c_idx, theta, t_array, calcV)
+    function [q, j, Vq, Vj] = calcCharges(obj, c_idx, theta, t_array, varargin)
         % =================================================================
         % Purpose : Calculates expectation values of charge densities and
         %           associated currents.
         % Input :   c_idx   -- charge indices
         %           theta   -- filling function (cell array of iFluidTensor)
         %           t_array -- array of times corresponding to theta
-        %           calcV   -- (optional) if true, calc form factors
+        %           varargin-- optional arguments:
+        %                       calc_formfactors (default = false)
+        %                       sum_types (default = true)
         % Output:   q       -- charge exp. vals for each t in t_array
         %           j       -- current exp. vals for each t in t_array
         %           Vq      -- one-particle charge form factors
         %           Vq      -- one-particle current form factors
         % ================================================================= 
-        if iscell(theta)
-            Nsteps = length(theta); % number of time steps
-        else
-            Nsteps = 1;
-        end
         
-        if nargin < 5
-            calcV = false;
-        end
+        parser = inputParser;
+
+        addParameter(parser, 'calc_formfactors', false, @(x) islogical(x));
+        addParameter(parser, 'sum_types', true, @(x) islogical(x));
+
+        parse(parser, varargin{:});
+        
         
         Ncharg  = length(c_idx); 
-        q       = zeros(obj.M, Nsteps, Ncharg);
-        j       = zeros(obj.M, Nsteps, Ncharg);
-        Vq      = cell(Nsteps, Ncharg);
-        Vj      = cell(Nsteps, Ncharg);
+        Nsteps  = length(t_array);
+        
+        if parser.Results.sum_types
+            q       = zeros(obj.M, Nsteps, Ncharg);
+            j       = zeros(obj.M, Nsteps, Ncharg);
+            Vq      = cell(Nsteps, Ncharg);
+            Vj      = cell(Nsteps, Ncharg);
+        else
+            q       = zeros(obj.M, Nsteps, Ncharg, obj.Ntypes);
+            j       = zeros(obj.M, Nsteps, Ncharg, obj.Ntypes);
+            Vq      = cell(Nsteps, Ncharg);
+            Vj      = cell(Nsteps, Ncharg);
+        end
     
         for i = 1:Nsteps
             if Nsteps == 1
@@ -337,16 +347,12 @@ methods (Access = public)
                 theta_i = theta{i};
             end
             
-            if nargin < 4
-                t = 0;
-            else
-                t = t_array(i);
-            end
+            t       = t_array(i);
             
             dp      = obj.getMomentumRapidDeriv(t, obj.x_grid, obj.rapid_grid, obj.type_grid);
             dE      = obj.getEnergyRapidDeriv(t, obj.x_grid, obj.rapid_grid, obj.type_grid);
             
-            if calcV
+            if parser.Results.calc_formfactors
                 v_eff = obj.calcEffectiveVelocities(theta_i, t, obj.x_grid, obj.rapid_grid, obj.type_grid);
             end
 
@@ -354,10 +360,14 @@ methods (Access = public)
                 hn          = obj.getOneParticleEV( c_idx(n), t, obj.x_grid, obj.rapid_grid);               
                 hn_dr       = obj.applyDressing(hn, theta_i, t);
                 
+                if parser.Results.sum_types
                 q(:,i,n)    = 1/(2*pi) * squeeze(sum( obj.rapid_w .* sum( double(dp.*theta_i.*hn_dr) , 3) , 1));
                 j(:,i,n)    = 1/(2*pi) * squeeze(sum( obj.rapid_w .* sum( double(dE.*theta_i.*hn_dr) , 3) , 1));
-                
-                if calcV
+                else
+                q(:,i,n,:)  = 1/(2*pi) * squeeze(sum( obj.rapid_w .* double(dp.*theta_i.*hn_dr), 1));
+                j(:,i,n,:)  = 1/(2*pi) * squeeze(sum( obj.rapid_w .* double(dE.*theta_i.*hn_dr), 1));
+                end
+                if parser.Results.calc_formfactors
                     Vq{i,n} = hn_dr;
                     Vj{i,n} = v_eff.*hn_dr;
                 end

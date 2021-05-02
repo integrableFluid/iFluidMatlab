@@ -755,7 +755,7 @@ methods (Access = public)
     
     
     
-    %% Old getter functions
+    %% Old getter functions (avoid using these if possible)
     function C = getX(obj, x_idx, t_str)
         % Returns the iFluidTensor at spatial index x_idx
         mat = obj.matrix(:,x_idx,:,:,:);
