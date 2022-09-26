@@ -310,31 +310,38 @@ methods (Access = public)
     end
     
     
-    function [q, j] = calcCharges(obj, c_idx, theta, t_array)
+    function [q, j] = calcCharges(obj, c_idx, theta, t_array, convert_output)
+        if nargin < 5
+            convert_output = true;
+        end
+        
         % Convert SI --> TBA
         t_array = obj.convert2TBA(t_array, 'time');
         
         % Run LLS function
         [q, j] = calcCharges@LiebLinigerModel(obj, c_idx, theta, t_array);
         
+        if convert_output
         % Convert TBA --> SI
-        % NOTE: Doesn't convert currents
         for i = length(c_idx)
             switch c_idx(i)
             case 0 % atomic density
                 q(:,:,i) = obj.convert2TBA(q(:,:,i), 'length'); % convert 'per length'
-                
+                j(:,:,i) = obj.convert2TBA(j(:,:,i), 'time'); % convert 'per time'                
             case 1 % momentum density
                 q(:,:,i) = obj.convert2SI(q(:,:,i), 'momentum'); 
                 q(:,:,i) = obj.convert2TBA(q(:,:,i), 'length'); % convert 'per length'
-                
+                j(:,:,i) = obj.convert2SI(j(:,:,i), 'momentum'); 
+                j(:,:,i) = obj.convert2TBA(j(:,:,i), 'time'); % convert 'per time'                
             case 2 %energy density
                 q(:,:,i) = obj.convert2SI(q(:,:,i), 'energy'); 
                 q(:,:,i) = obj.convert2TBA(q(:,:,i), 'length'); % convert 'per length'
-                
+                j(:,:,i) = obj.convert2SI(j(:,:,i), 'energy'); 
+                j(:,:,i) = obj.convert2TBA(j(:,:,i), 'time'); % convert 'per time'                
             otherwise
                 disp(['Warning: No known unit of charge nr. ' num2str(c_idx(i))])
             end
+        end
         end
     end
     
@@ -345,7 +352,7 @@ methods (Access = public)
         
         if nargin == 3
             % Convert SI --> TBA
-            TBA_couplings   = obj.convert2TBA(TBA_couplings, 'couplings');
+%             TBA_couplings   = obj.convert2TBA(TBA_couplings, 'couplings');
             [theta, e_eff]  = calcThermalState@LiebLinigerModel(obj, T, TBA_couplings);
         else
             [theta, e_eff]  = calcThermalState@LiebLinigerModel(obj, T);

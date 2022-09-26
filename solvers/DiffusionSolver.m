@@ -55,6 +55,38 @@ methods (Access = public)
         
     end
     
+    
+    
+    function [F, DT] = calcDiffusion_theta(obj, theta, t)
+        % =================================================================
+        % Purpose : Calculate diffusion kernel from background state.
+        % Input :   theta_BG -- Filling function of background state.
+        % Output:   D        -- Linearized diffusion kernel
+        %           v_eff    -- Effective velocity from background
+        % =================================================================
+        
+        [rhoP, rhoS] = obj.transform2rho(theta, t);
+        
+        % Prepare required quantities
+        I           = fluidcell.eye(obj.N, obj.Ntypes);
+        T           = -1/(2*pi)*obj.getScatteringRapidDeriv(0, obj.x_grid, obj.rapid_grid, obj.rapid_aux, obj.type_grid, obj.type_aux);
+        T_dr        = obj.applyDressing(T, theta, 0);
+        v_eff       = obj.calcEffectiveVelocities(theta, 0);
+        
+        % Calculate diffusion kernel
+        W           = 0.5*rhoP.*(1-theta).*T_dr.^2 .* abs(v_eff - v_eff.t());
+        w           = sum( W.*obj.rapid_w, 1); 
+        DT          = rhoS.^(-2).*(I.*w - W);
+        
+        % Calculate diffusion operator
+        R           = (I - T.*theta)./rhoS;  
+        Ri          = inv(R);  
+        theta_x     = gradient(theta, 'x', obj.x_grid);
+        temp        = gradient(Ri*((DT*(theta_x.*obj.rapid_w)).*obj.rapid_w), 'x', obj.x_grid);
+        F           = R*(temp.*obj.rapid_w);
+        
+    end
+    
 end % end public methods
 
 

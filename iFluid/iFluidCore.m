@@ -411,24 +411,54 @@ methods (Access = public)
         end
     end
 
-
-    function [v_eff, a_eff] = calcEffectiveVelocities(obj, theta, t, x, rapid, type)        
+    
+    function [v_eff, a_eff, de_dr, dp_dr] = calcEffectiveVelocities(obj, theta, t, varargin)        
         % =================================================================
         % Purpose : Calculates effective velocity and acceleration of
         %           quasiparticles.
         % Input :   theta -- filling function (iFluidTensor)
         %           t     -- time (scalar)
-        %           x     -- x-coordinate (can be scalar or vector)
-        %           rapid -- rapid-coordinate (can be scalar or vector)
-        %           type  -- quasiparticle type (can be scalar or vector)
         % Output:   v_eff -- Effective velocity (iFluidTensor)
         %           a_eff -- Effective acceleration (iFluidTensor)
         % =================================================================
-        if nargin == 3
+        if length(varargin) == 0
+            % No extra arguments given, use default grids
             x       = obj.x_grid;
             rapid   = obj.rapid_grid;
             type    = obj.type_grid;
+            
+            [v_eff, a_eff, de_dr, dp_dr] = obj.calcVelocitiesNormal(theta, t, x, rapid, type);  
+            
+        elseif length(varargin) == 3
+            % Grids given as extra arguments
+            x       = varargin{1};
+            rapid   = varargin{2};
+            type    = varargin{3};
+            
+            [v_eff, a_eff, de_dr, dp_dr] = obj.calcVelocitiesNormal(theta, t, x, rapid, type);  
+            
+        elseif length(varargin) == 1
+            % Dressing operator given as extra argument. Calculate dressing
+            % using this operator instead of '\' operation.
+            D       = varargin{1};
+            
+            [v_eff, a_eff, de_dr, dp_dr] = obj.calcVelocitiesFast(theta, t, D);  
         end
+    end
+    
+
+    function [v_eff, a_eff, de_dr, dp_dr] = calcVelocitiesNormal(obj, theta, t, x, rapid, type)        
+        % =================================================================
+        % Purpose : Calculates effective velocity and acceleration of
+        %           quasiparticles.
+        % Input :   theta -- filling function (fluidtensor)
+        %           t     -- time (scalar)
+        %           x     -- x-coordinate (can be scalar or vector)
+        %           rapid -- rapid-coordinate (can be scalar or vector)
+        %           type  -- quasiparticle type (can be scalar or vector)
+        % Output:   v_eff -- Effective velocity (fluidtensor)
+        %           a_eff -- Effective acceleration (fluidtensor)
+        % =================================================================
         
         de_dr   = obj.applyDressing(obj.getEnergyRapidDeriv(t, x, rapid, type), theta, t);
         dp_dr   = obj.applyDressing(obj.getMomentumRapidDeriv(t, x, rapid, type), theta, t);
@@ -467,13 +497,69 @@ methods (Access = public)
         a_eff   = a_eff./dp_dr;
     end
     
+    
+    function [v_eff, a_eff, de_dr, dp_dr] = calcVelocitiesFast(obj, theta, t, D)        
+        % =================================================================
+        % Purpose : Calculates effective velocity and acceleration of
+        %           quasiparticles.
+        % Input :   theta -- filling function (fluidtensor)
+        %           t     -- time (scalar)
+        %           D     -- dressing operator (fluidtensor)
+        % Output:   v_eff -- Effective velocity (fluidtensor)
+        %           a_eff -- Effective acceleration (fluidtensor)
+        % =================================================================
+        x       = obj.x_grid;
+        rapid   = obj.rapid_grid;
+        type    = obj.type_grid;
+        
+        de      = obj.getEnergyRapidDeriv(t, x, rapid, type);
+        dp      = obj.getMomentumRapidDeriv(t, x, rapid, type);
+        
+        de_dr   = obj.dress(de, D);
+        dp_dr   = obj.dress(dp, D);
+        
+        v_eff   = de_dr./dp_dr;
+         
+        % Calculate acceleration from inhomogenous couplings
+        a_eff   = 0;
+        
+        if obj.homoEvol % if homogeneous couplings, acceleration = 0
+            a_eff = fluidcell.zeros( size(v_eff) );
+            return
+        end
+        
+        % Calculate contribution for each coupling
+        for coupIdx = 1:size(obj.couplings,2)            
+            dT      = obj.getScatteringCouplingDeriv(coupIdx, t, x, rapid, obj.rapid_aux, type, obj.type_aux);
+            accKern = 1/(2*pi) * dT.*transpose(obj.rapid_w .* theta);
+            
+            % if time deriv of coupling exist, compute f
+            if ~isempty(obj.couplings{2,coupIdx}) 
+                f       = -obj.getMomentumCouplingDeriv(coupIdx, t, x, rapid, type) + accKern*dp_dr;
+                f_dr    = obj.dress(f, D);
+                a_eff   = a_eff + obj.couplings{2,coupIdx}(t,x).*f_dr;
+            end
+            
+            % if spacial deriv of coupling exist, compute Lambda
+            if ~isempty(obj.couplings{3,coupIdx}) 
+                L       = -obj.getEnergyCouplingDeriv(coupIdx, t, x, rapid, type) + accKern*de_dr;
+                L_dr    = obj.dress(L, D);
+                a_eff   = a_eff + obj.couplings{3,coupIdx}(t,x).*L_dr;
+            end
+        end
+        
+     
+        a_eff   = a_eff./dp_dr;
+    end
+    
+    
     function Q_dr = applyDressing(obj, Q, theta, t)
         % =================================================================
         % Purpose : Dresses quantity Q by solving system of linear eqs.
         % Input :   Q     -- Quantity to be dressed
-        %           theta -- filling function (iFluidTensor)
+        %           theta -- filling function (fluidtensor)
         %           t     -- time (scalar)
-        % Output:   Q_dr  -- Dressed quantity (iFluidTensor)
+        % Output:   Q_dr  -- Dressed quantity (fluidtensor)
         % =================================================================
         if ~isa(Q, 'fluidcell')
             Q = fluidcell(Q);
@@ -494,7 +580,36 @@ methods (Access = public)
         % We now have the equation Q = U*Q_dr. Therefore we solve for Q_dr
         % using the '\' operation.
         Q_dr     = U\Q;
-           
+    end
+    
+    
+    function Q_dr = dress(obj, Q, Uinv)
+        if ~isa(Q, 'fluidcell')
+            Q = fluidcell(Q);
+        end
+        
+        if size(Q,1) == 1
+            X = repmat(double(Q), obj.N, 1, obj.Ntypes);
+            Q = fluidcell(X);
+        end
+        
+        Q_dr = Uinv*Q;
+        
+    end
+    
+    
+    function Uinv = calcDressingOperator(obj, theta, t)
+        % =================================================================
+        % Purpose : Returns the dressing operator used to dress functions.
+        % Input :   theta -- filling function (fluidtensor)
+        %           t     -- time (scalar)
+        % Output:   Uinv  -- Dressing operator (fluidtensor)
+        % =================================================================
+        
+        kernel  = 1/(2*pi)*obj.getScatteringRapidDeriv(t, obj.x_grid, obj.rapid_grid, obj.rapid_aux, obj.type_grid, obj.type_aux);        
+        I       = fluidcell.eye(obj.N, obj.Ntypes);
+        U       = I + kernel.*transpose(obj.rapid_w.*theta);
+        Uinv    = inv(U);
     end
     
     
@@ -553,48 +668,15 @@ methods (Access = public)
     end
     
     
-    function s = calcEntropyDensity(obj, theta, w, t_array)
-        
-%         if iscell(theta)
-%             Nsteps = length(theta); % number of time steps
-%         else
-%             Nsteps = 1;
-%         end
-%         
-%         if nargin < 4
-%             e_eff = obj.calcEffectiveEnergy(obj, w, 0, obj.x_grid);
-%         end
-%         
-%         s       = zeros(obj.M, Nsteps);
-%     
-%         for i = 1:Nsteps
-%             if Nsteps == 1
-%                 theta_i = theta;
-%             else
-%                 theta_i = theta{i};
-%             end
-%             
-%             if nargin < 4
-%                 t = 0;
-%             else
-%                 t = t_array(i);
-%                 e_eff = obj.calcEffectiveEnergy(w, t, obj.x_grid);
-%             end
-%             
-%             dp      = obj.getMomentumRapidDeriv(t, obj.x_grid, obj.rapid_grid, obj.type_grid);
-%             rho     = obj.transform2rho(theta_i, t);
-%             F       = obj.getFreeEnergy(e_eff);
-%             
-%             s(:,i)  = squeeze( sum(sum(obj.rapid_w.*( rho.*w - dp.*F/(2*pi) )  ,1,'d'),3) );
-%         end
-
+    function s = calcEntropyDensity(obj, theta, t_array)
+       
         [rhoP, rhoS] = obj.transform2rho(theta, t_array);
         
         Nsteps = length(t_array);
         s       = zeros(obj.M, Nsteps);
         
         for i = 1:Nsteps
-            s(:,i) = - squeeze(double(sum(sum(obj.rapid_w.*rhoS{i}.*( theta{i}.*log(theta{i}) + (1-theta{i}).*log(1-theta{i}) ) ,1),3)));
+            s(:,i) = - squeeze(double(sum(sum(obj.rapid_w.*rhoS{i}.*( theta{i}.*log(theta{i}) + (1-theta{i}).*log(1-theta{i}) ) ,1,'omitnan'),3,'omitnan')));
         end
 
     end

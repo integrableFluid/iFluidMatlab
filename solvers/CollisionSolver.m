@@ -66,7 +66,7 @@ methods (Access = public)
     end
     
     
-    function [I, J] = calcCollisionIntegral(obj, rhoP, rhoH, nu)
+    function [I, J, Ip_minus, Ih_minus, Ip_plus, Ih_plus] = calcCollisionIntegral(obj, rhoP, rhoH, nu)
         % =================================================================
         % Purpose : Calculate collision integral in LL model
         % Input :   rhoP -- root density (iFluidTensor)

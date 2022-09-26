@@ -403,6 +403,30 @@ methods (Access = public)
     end
     
     
+    function C = mpower(A,B)
+        % Overloads A^B operation
+        assert( isscalar(B) && isnumeric(B) );
+        
+        % Compine rapid1 and type1 into first index. 
+        % Combine rapid2 and type2 into second index.
+        SA      = size(A);
+        a       = reshape(permute(A.matrix, [1 3 4 5 2]), SA(1)*SA(3), SA(4)*SA(5), SA(2) );
+            
+        clear A % free up some memory
+
+        % Take power of a for each space slice
+        x       = zeros(size(a));
+        for i = 1:size(a,3)
+            x(:,:,i) = mpower(a(:,:,i),B);
+        end
+
+        % First split the type and rapidity indices by reshaping, then
+        % permute to right positions
+        SC      = [SA(1), SA(3), SA(4), SA(5), SA(2)];
+        C       = fluidcell( permute(reshape( x, SC ), [1 5 2 3 4]) );
+    end
+    
+    
     function C = times(A,B)       
         % overloads A.*B operation
         C = fluidcell(times(double(A),double(B)));

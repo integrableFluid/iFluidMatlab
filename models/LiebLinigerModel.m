@@ -248,7 +248,7 @@ methods (Access = public)
     end
     
     
-    function [mu0_fit, theta_fit] = fitDensity(obj, T, density_target, mu0_guess)
+    function [mu0_fit, theta_fit] = fitDensity(obj, T, density_target, mu0_guess, silent)
         % =================================================================
         % Purpose : Assuming a homogeneous system, fit the chemical
         %           potential to reproduce the desired atomic density. 
@@ -258,9 +258,18 @@ methods (Access = public)
         % Output:   mu0_fit -- Fitted central chemical potential.
         %           theta_fit -- Fitted filling function.
         % =================================================================
+        if nargin < 5
+            silent = false;
+        end
+        
         fitfunc     = @(mu0) abs( density_target - calcDens(obj, mu0, T) );
-        options     = optimset('Display','iter');
-        mu0_fit     = fminsearch(fitfunc, mu0_guess, options);
+        
+        if ~silent
+            options     = optimset('Display','iter');
+            mu0_fit     = fminsearch(fitfunc, mu0_guess, options);
+        else
+            mu0_fit     = fminsearch(fitfunc, mu0_guess);
+        end
         
         [~, theta_fit] = calcDens(obj, mu0_fit, T);
         
@@ -384,23 +393,18 @@ methods (Access = public)
     end
     
     
-    function [v_eff, a_eff] = calcEffectiveVelocities(obj, theta, t, x, rapid, type)        
+    function [v_eff, a_eff, de_dr, dp_dr] = calcVelocitiesNormal(obj, theta, t, x, rapid, type)        
         % =================================================================
         % Purpose : Overloads superclass method, as acceleration in LL
         %           model can be computed in more efficient way.
-        % Input :   theta -- filling function (iFluidTensor)
+        % Input :   theta -- filling function (fluidtensor)
         %           t     -- time (scalar)
         %           x     -- x-coordinate (can be scalar or vector)
         %           rapid -- rapid-coordinate (can be scalar or vector)
         %           type  -- quasiparticle type (can be scalar or vector)
-        % Output:   v_eff -- Effective velocity (iFluidTensor)
-        %           a_eff -- Effective acceleration (iFluidTensor)
+        % Output:   v_eff -- Effective velocity (fluidtensor)
+        %           a_eff -- Effective acceleration (fluidtensor)
         % =================================================================
-        if nargin == 3
-            x       = obj.x_grid;
-            rapid   = obj.rapid_grid;
-            type    = obj.type_grid;
-        end
         
         de_dr   = obj.applyDressing(obj.getEnergyRapidDeriv(t, x, rapid, type), theta, t);
         dp_dr   = obj.applyDressing(obj.getMomentumRapidDeriv(t, x, rapid, type), theta, t);
@@ -441,6 +445,71 @@ methods (Access = public)
         if ~isempty(obj.couplings{3,2}) % calc space deriv contribution
             L       = B*de_dr;
             L_dr    = obj.applyDressing(L, theta, t);
+            a_eff_c = a_eff_c + obj.couplings{3,2}(t,x).*L_dr;
+        end
+        
+        a_eff_c = a_eff_c./dp_dr;
+        a_eff   = a_eff_c + a_eff_mu;
+    end
+    
+    
+    function [v_eff, a_eff, de_dr, dp_dr] = calcVelocitiesFast(obj, theta, t, D)        
+        % =================================================================
+        % Purpose : Calculates effective velocity and acceleration of
+        %           quasiparticles.
+        % Input :   theta -- filling function (fluidtensor)
+        %           t     -- time (scalar)
+        %           D     -- dressing operator (fluidtensor)
+        % Output:   v_eff -- Effective velocity (fluidtensor)
+        %           a_eff -- Effective acceleration (fluidtensor)
+        % =================================================================
+        x       = obj.x_grid;
+        rapid   = obj.rapid_grid;
+        type    = obj.type_grid;
+        
+        de      = obj.getEnergyRapidDeriv(t, x, rapid, type);
+        dp      = obj.getMomentumRapidDeriv(t, x, rapid, type);
+        
+        de_dr   = obj.dress(de, D);
+        dp_dr   = obj.dress(dp, D);
+        
+        v_eff   = de_dr./dp_dr;
+         
+        % Calculate acceleration from inhomogenous couplings       
+        if obj.homoEvol % if homogeneous couplings, acceleration = 0
+            a_eff = fluidcell.zeros( size(v_eff) );
+            return
+        end
+        
+        % Calculate acceleration from inhomogenous potential. Note dmudt
+        % does not contribute as f = 0;
+        a_eff_mu = 0;
+        if ~isempty(obj.couplings{3,1})
+            a_eff_mu = obj.couplings{3,1}(t,x);
+            if size(a_eff_mu,1) == 1
+                a_eff_mu = repmat(a_eff_mu, length(rapid), 1); 
+            end
+        end
+        a_eff_mu = fluidcell(a_eff_mu);
+        
+        % Calculate acceleration from inhomogenous interaction
+        a_eff_c = 0;
+        if ~isempty(obj.couplings{2,2}) || ~isempty(obj.couplings{3,2})
+            % Calculate derivative of scattering phase with respect to
+            % interaction c           
+            dT      = obj.getScatteringCouplingDeriv(2, t, x, rapid, obj.rapid_aux, type, obj.type_aux);
+            B       = 1/(2*pi) * dT.*transpose(obj.rapid_w .* theta);
+        end
+        
+        if ~isempty(obj.couplings{2,2}) % calc time deriv contribution
+            f       = B*dp_dr;
+            f_dr    = obj.dress(f, D);
+            a_eff_c = a_eff_c + obj.couplings{2,2}(t,x).*f_dr;
+        end
+
+        if ~isempty(obj.couplings{3,2}) % calc space deriv contribution
+            L       = B*de_dr;
+            L_dr    = obj.dress(L, D);
             a_eff_c = a_eff_c + obj.couplings{3,2}(t,x).*L_dr;
         end
         
@@ -580,6 +649,15 @@ methods (Access = public)
         
         P(isnan(P)) = 0; 
     end
+    
+    
+    function F = calcBackflow(obj, theta, t, x)
+        phi     = -2*atan( (obj.rapid_grid - obj.rapid_aux)./obj.couplings{1,2}(t,x) );
+        F       = obj.applyDressing( phi, theta, t )/2/pi;
+    end
+    
+    
+    
     
     
       

@@ -41,6 +41,7 @@ properties (Access = protected)
     % Optional parameters (default values specified here). 
     extrapFlag      = false;    % Flag for using extrapolation during propagation (useful for open systems)
     periodRapid     = false;    % Flag for periodic boundary conditions on rapidity
+    periodSpace     = false;    % Flag for periodic boundary conditions on space
     calcCharac      = true;     % Flag for if characteristics are calculated
     storeNthStep    = 1;        % Store every n'th step
 
@@ -225,8 +226,12 @@ methods (Access = protected)
         
         % Enforce periodic boundary conditions
         if obj.periodRapid 
-            rapid_int = mod(rapid_int + obj.rapid_grid(1), obj.rapid_grid(end)-obj.rapid_grid(1)) + obj.rapid_grid(1);
+            rapid_int   = mod(rapid_int + obj.rapid_grid(1), obj.rapid_grid(end)-obj.rapid_grid(1)) + obj.rapid_grid(1);
         end
+        if obj.periodSpace 
+            x_int       = mod(x_int + obj.x_grid(1), obj.x_grid(end)-obj.x_grid(1)) + obj.x_grid(1);
+        end
+        
         
         % Get matrix representation of iFluidTensor and pemute spacial index
         % to first.
