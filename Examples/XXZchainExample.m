@@ -11,17 +11,18 @@ addpath(['..' filesep 'utils' filesep])
 
 %% Define simulation parameters
 
-N           = 2^7 ;
-M           = 2^7;
-dt          = 0.01;
-Ntypes      = 3;
+N           = 2^7;                              % number of rapidity gridpoints             
+M           = 2^7;                              % number of position gridpoints
+dt          = 0.01;                             % time step length
+Ntypes      = 3;                                % number of quasi-particle types
 
-kmax        = pi/2;
-xmax        = 1.5;
-tmax        = 1;
+rmax        = pi/2;                             % max rapidity
+zmax        = 1.5;                              % max position
+tmax        = 1;                                % max time
 
-[k_array,kw]=legzo(N, -kmax, kmax);
-x_array     = linspace(-xmax, xmax, M);
+% use Gauss-Legendre quadrature for rapidity
+[r_grid,rw] =legzo(N, -rmax, rmax);             % rapidity grid and quadrature weights
+z_grid      = linspace(-zmax, zmax, M);
 t_array     = linspace(0, tmax, tmax/dt+1);
 
 
@@ -41,12 +42,12 @@ T       = 1;
 
 %% Initialize state and solve dynamics
 
-XXZ         = XXZchainModel(x_array, k_array, kw, couplings, Ntypes);
+XXZ         = XXZchainModel(z_grid, r_grid, rw, couplings, Ntypes);
 theta_init  = XXZ.calcThermalState(T);
 
 
-Solver2     = SecondOrderSolver(XXZ, []);
-theta_t     = Solver2.propagateTheta(theta_init, t_array);
+Solver      = AdvectionSolver_BSL_RK4(XXZ, 'implicit', false);
+theta_t     = Solver.propagateTheta(theta_init, t_array);
 %%
 XXZ.setCouplings( {@(t,x) 0 , @(t,x) acosh(1.5)} );
 
@@ -60,27 +61,29 @@ t_sample = [1 31 61 101];
 figure('Position',[500 200 600 350])
 
 sax1 = subplot(2,2,1);
-plot(x_array,  n_t(:,t_sample,1),'Linewidth',1.5)
-xlim([-xmax, xmax])
+plot(z_grid,  n_t(:,t_sample,1),'Linewidth',1.5)
+xlim([-zmax, zmax])
 xlabel('x')
 ylabel('q_0')
 
 sax2 = subplot(2,2,2);
-plot(x_array,  n_t(:,t_sample,3),'Linewidth',1.5)
-xlim([-xmax, xmax])
+plot(z_grid,  n_t(:,t_sample,3),'Linewidth',1.5)
+xlim([-zmax, zmax])
 xlabel('x')
 ylabel('q_2')
 
 sax3 = subplot(2,2,3);
-plot(x_array,  j_t(:,t_sample,1),'Linewidth',1.5)
-xlim([-xmax, xmax])
+plot(z_grid,  j_t(:,t_sample,1),'Linewidth',1.5)
+xlim([-zmax, zmax])
 xlabel('x')
 ylabel('j_0')
 
 sax4 = subplot(2,2,4);
-plot(x_array,  j_t(:,t_sample,3),'Linewidth',1.5)
-xlim([-xmax, xmax])
+plot(z_grid,  j_t(:,t_sample,3),'Linewidth',1.5)
+xlim([-zmax, zmax])
 xlabel('x')
 ylabel('j_2')
 
+legend( strcat('t=',string(num2cell(t_array(t_sample)))) )
+sgtitle('evolution of charges and currents')
 

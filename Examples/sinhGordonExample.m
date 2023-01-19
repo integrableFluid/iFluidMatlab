@@ -11,19 +11,18 @@ addpath(['..' filesep 'utils' filesep])
 
 %% Define simulation parameters
 
-N           = 2^7;
-M           = 2^7;
-dt          = 0.025;
+N           = 2^7;                              % number of rapidity gridpoints             
+M           = 2^7;                              % number of position gridpoints
+dt          = 0.025;                            % time step length
 
-kmax        = 3;
-xmax        = 2;
-tmax        = 2;
+rmax        = 3;                                % max rapidity
+zmax        = 2;                                % max position
+tmax        = 2;                                % max time
 
-[k_array,kw]=legzo(N, -kmax, kmax);
-x_array     = linspace(-xmax, xmax, M);
+% use Gauss-Legendre quadrature for rapidity
+[r_grid,rw] =legzo(N, -rmax, rmax);             % rapidity grid and quadrature weights
+z_grid      = linspace(-zmax, zmax, M);
 t_array     = linspace(0, tmax, tmax/dt+1);
-
-options.extrapFlag = true;
 
 
 %% Define physical couplings and temperature
@@ -35,12 +34,15 @@ couplings   = { alpha  , @(t,x) 1 , @(t,x) 0 ;     % coupling
                 dadt   , []       , []       ;     % d/dt coupling  
                 []     , []       , []       };    % d/dx coupling
 
-T           = @(x) 1.5 + 0.25*tanh(50*x);
+T           = @(x) 1.5 + 0.25*tanh(50*x);          % position dependent temperature
 
 
 %% Initialize solvers and model + initial state
-shG         = sinhGordonModel(x_array, k_array, kw, couplings);
-Solver2     = SecondOrderSolver(shG, options);
+
+shG         = sinhGordonModel(z_grid, r_grid, rw, couplings);
+
+% enable extrapolation for homogeneous non-zero filling outside zmax
+Solver      = AdvectionSolver_BSL_RK4(shG, 'implicit', false, 'extrapolate', true);
 
 % balance density difference between two halves of system via offset
 % chemical potential in initial state.
@@ -50,7 +52,7 @@ theta_init  = shG.calcThermalState(T, coup_init);
 
 
 %% Solve dynamics and calculate expectation values
-theta_t     = Solver2.propagateTheta(theta_init, t_array);
+theta_t     = Solver.propagateTheta(theta_init, t_array);
 
 [n_t, j_t]  = shG.calcCharges([0 1 2], theta_t, t_array); % (density, momentum and energy)
 
@@ -66,18 +68,18 @@ sax1 = subplot(2,1,1);
 hold on
 box on
 for i = 1:length(sample_idx)
-    plot(x_array, Psi_k_t(:,3,sample_idx(i)),'LineWidth',1.5)
+    plot(z_grid, Psi_k_t(:,3,sample_idx(i)),'LineWidth',1.5)
 end
-ylabel('langle \Phi _{3} \rangle')
-xlabel('x')
+ylabel('\langle \Phi _{3} \rangle')
+xlabel('position z')
 
 sax2 = subplot(2,1,2);
 hold on
 box on
 for i = 1:length(sample_idx)
-    plot(x_array, n_t(:,sample_idx(i),1),'LineWidth',1.5)
+    plot(z_grid, n_t(:,sample_idx(i),1),'LineWidth',1.5)
 end
-xlabel('x')
+xlabel('position z')
 ylabel('q_0')
 
 legstr = [];

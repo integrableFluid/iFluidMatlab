@@ -438,8 +438,8 @@ methods (Access = public)
             [v_eff, a_eff, de_dr, dp_dr] = obj.calcVelocitiesNormal(theta, t, x, rapid, type);  
             
         elseif length(varargin) == 1
-            % Dressing operator given as extra argument. Calculate dressing
-            % using this operator instead of '\' operation.
+            % Dressing kernel given as extra argument. Calculate dressing
+            % using this kernel instead of '\' operation.
             D       = varargin{1};
             
             [v_eff, a_eff, de_dr, dp_dr] = obj.calcVelocitiesFast(theta, t, D);  
