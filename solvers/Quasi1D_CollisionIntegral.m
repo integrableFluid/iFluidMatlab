@@ -54,8 +54,8 @@ methods (Access = public)
         Pp      = obj.model.calcExcitationProb(0, obj.x_grid, k, qp);
         Pm      = obj.model.calcExcitationProb(0, obj.x_grid, k, qm);
         
-        obj.Pm = 2 * 2*pi * Pm.*k.*heaviside( 2*k*lperp-2*sqrt(2) );
-        obj.Pp = 2 * 2*pi * Pp.*k;
+        obj.Pm = 2*(2*pi)^2 * Pm.*k.*heaviside( 2*k*lperp-2*sqrt(2) );
+        obj.Pp = 2*(2*pi)^2 * Pp.*k;
     end
     
 
@@ -73,15 +73,20 @@ methods (Access = public)
         [rhoP, rhoS] = obj.model.transform2rho(theta, t);
         
         % calculate rho_p and rho_h on collision grids        
-        theta_p   = obj.interp2map( theta, obj.gridmap_p);
-        theta_m   = obj.interp2map( theta, obj.gridmap_m);        
+        theta_p  = obj.interp2map( theta, obj.gridmap_p);
+        theta_m  = obj.interp2map( theta, obj.gridmap_m);  
+        rhoS_p   = obj.interp2map( rhoS, obj.gridmap_p);
+        rhoS_m   = obj.interp2map( rhoS, obj.gridmap_m); 
         
         % Calculate colition integral components
-        Ip_minus = trapz( obj.rapid_grid, double(obj.Pm.*rhoS.t().*(theta.*theta.t().*(1-theta_m).*(1-theta_m.t()))), 4);
-        Ih_minus = trapz( obj.rapid_grid, double(obj.Pm.*rhoS.t().*((1-theta).*(1-theta.t()).*theta_m.*theta_m.t())), 4);
-        Ip_plus  = trapz( obj.rapid_grid, double(obj.Pp.*rhoS.t().*(theta.*theta.t().*(1-theta_p).*(1-theta_p.t()))), 4);
-        Ih_plus  = trapz( obj.rapid_grid, double(obj.Pp.*rhoS.t().*((1-theta).*(1-theta.t()).*theta_p.*theta_p.t())), 4);
-
+        PM = obj.Pm.*rhoS.t().*rhoS_m.*rhoS_m.t();
+        PP = obj.Pp.*rhoS.t().*rhoS_p.*rhoS_p.t();
+        
+        Ip_minus = trapz( obj.rapid_grid, double(PM.*(theta.*theta.t().*(1-theta_m).*(1-theta_m.t()))), 4);
+        Ih_minus = trapz( obj.rapid_grid, double(PM.*((1-theta).*(1-theta.t()).*theta_m.*theta_m.t())), 4);
+        Ip_plus  = trapz( obj.rapid_grid, double(PP.*(theta.*theta.t().*(1-theta_p).*(1-theta_p.t()))), 4);
+        Ih_plus  = trapz( obj.rapid_grid, double(PP.*((1-theta).*(1-theta.t()).*theta_p.*theta_p.t())), 4);
+        
         % Normalize minus grids to plus grids
         Nh_plus  = trapz(obj.x_grid, trapz(obj.rapid_grid, double(Ih_plus.*rhoS), 1), 2);
         Np_plus  = trapz(obj.x_grid, trapz(obj.rapid_grid, double(Ip_plus.*rhoS), 1), 2);
