@@ -1,4 +1,4 @@
-clear all; close all;
+clear all; 
 
 % In this example the dynamics of a quantum Newtons cradle are calculated.
 % The cradle consist of two clouds of 1D Bose gases, which oscillate in a

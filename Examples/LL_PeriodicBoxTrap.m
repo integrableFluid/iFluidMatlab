@@ -1,4 +1,4 @@
-clear all; close all; clc;
+clear all; 
 
 % In this example a thermal state is initialized in a cos-potential, which
 % at time t=0 is quenched to a sin-potential.
