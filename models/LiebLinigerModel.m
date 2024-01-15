@@ -262,7 +262,8 @@ methods (Access = public)
             silent = false;
         end
         
-        fitfunc     = @(mu0) abs( density_target - calcDens(obj, mu0, T) );
+%         fitfunc     = @(mu0) abs( density_target - calcDens(obj, mu0, T) );
+        fitfunc     = @(mu0) abs( density_target - calcDens(obj, mu0, T) )./density_target; % relative error
         
         if ~silent
             options     = optimset('Display','iter');

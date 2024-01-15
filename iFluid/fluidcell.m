@@ -477,7 +477,6 @@ methods (Access = public)
             a       = repmat(a, [1, 1, Dx/size(a,3)]);
             b       = repmat(b, [1, 1, Dx/size(b,3)]);
             
-            
             % Multiply a and b for each space slice
             if verLessThan('MATLAB','9.9')
                 xsize   = [ size(a,1), size(b,2), Dx ];

@@ -51,6 +51,9 @@ methods (Access = protected)
       
 
     function [x_d, r_d, v_n, a_n] = calculateDeparturePoints(obj, theta, t, dt)
+        % Note, for interpolation of velocities, always extrapolate (true)
+        % but ignore boundary conditions (false).
+
         % calculate derivatives of velocities and use to estimate
         % velocities at temporal midpoint
         V           = obj.calcVelocityDerivatives(obj.settings.deriv_order, theta, t);
@@ -75,8 +78,8 @@ methods (Access = protected)
             error       = 1;
             iter        = 1;
             while error > obj.settings.tol && iter <= obj.settings.max_iter
-                veff_d      = obj.interpPhaseSpace(veff_mid, (obj.rapid_grid+r_d)/2, (obj.x_grid+x_d)/2, true);
-                aeff_d      = obj.interpPhaseSpace(aeff_mid, (obj.rapid_grid+r_d)/2, (obj.x_grid+x_d)/2, true);
+                veff_d      = obj.interpPhaseSpace(veff_mid, (obj.rapid_grid+r_d)/2, (obj.x_grid+x_d)/2, true, false);
+                aeff_d      = obj.interpPhaseSpace(aeff_mid, (obj.rapid_grid+r_d)/2, (obj.x_grid+x_d)/2, true, false);
 
                 Gx          = obj.x_grid - x_d - dt*veff_d;
                 Gr          = obj.rapid_grid - r_d - dt*aeff_d;
@@ -92,8 +95,8 @@ methods (Access = protected)
             x_star      = obj.x_grid - dt/2*V{1,1};
             r_star      = obj.rapid_grid - dt/2*V{2,1};
 
-            veff_star   = obj.interpPhaseSpace(veff_mid, r_star, x_star, true);
-            aeff_star   = obj.interpPhaseSpace(aeff_mid, r_star, x_star, true);
+            veff_star   = obj.interpPhaseSpace(veff_mid, r_star, x_star, true, false);
+            aeff_star   = obj.interpPhaseSpace(aeff_mid, r_star, x_star, true, false);
         
             x_d         = obj.x_grid - dt*veff_star;
             r_d         = obj.rapid_grid - dt*aeff_star;

@@ -139,7 +139,7 @@ methods (Access = public)
         if isempty(obj.source)
             % no source term --> pure advection
 
-            theta_next = obj.interpPhaseSpace(theta, r_d, x_d, obj.settings.extrapolate);
+            theta_next = obj.interpPhaseSpace(theta, r_d, x_d);
             obj.storeVelocityFields(theta_next, x_d, r_d, v, a);
 
             if obj.settings.prop_characteristics
@@ -228,7 +228,7 @@ methods (Access = public)
     end
     
 
-    function tensor_int = interpPhaseSpace(obj, tensor_grid, rapid_int, x_int, extrapolate)
+    function tensor_int = interpPhaseSpace(obj, tensor_grid, rapid_int, x_int, varargin)
         % =================================================================
         % Purpose : Interpolates an iFluidTensor defined on the grids 
         %           stored in the object to new coordinates.
@@ -248,6 +248,16 @@ methods (Access = public)
         % Output:   tensor_int -- iFluidTensor interpolated to input grids.
         % =================================================================
         
+        % Handle varargin 
+        defaultValues = { obj.settings.extrapolate,
+                          obj.settings.periodic_BC | obj.settings.reflective_BC }; 
+
+        idx = ~cellfun(@isempty,varargin);  % find which parameters have changed
+        defaultValues(idx)  = varargin(idx); % replace the changed ones
+        [extrap, enforce_BC]= defaultValues{:};  
+
+
+
         % Cast to matrix form
         x_int       = double(x_int);
         rapid_int   = double(rapid_int);
@@ -257,14 +267,16 @@ methods (Access = public)
         x_int       = permute(x_int, [2 1 3]); % (M,N,Nt)
         rapid_int   = permute(rapid_int, [2 1 3]);
         
-        % Enforce periodic boundary conditions
+        % Enforce periodic boundary conditions of rapidity
         if obj.settings.periodic_rapid 
             rapid_int   = mod(rapid_int + obj.rapid_grid(1), obj.rapid_grid(end)-obj.rapid_grid(1)) + obj.rapid_grid(1);
         end
-        if obj.settings.periodic_BC 
+
+        % If required, enforce boundary conditions of position
+        if enforce_BC && obj.settings.periodic_BC 
             x_int       = mod(x_int + obj.x_grid(1), obj.x_grid(end)-obj.x_grid(1)) + obj.x_grid(1);
         end
-        if obj.settings.reflective_BC     
+        if enforce_BC && obj.settings.reflective_BC     
             filter_R        = (x_int - obj.x_grid(end)) > 0; % hit right wall
             filter_L        = (x_int - obj.x_grid(1)) < 0; % hit left wall
             filter          = filter_R | filter_L;
@@ -277,9 +289,9 @@ methods (Access = public)
                                 filter_R .* (-rapid_int) + ...         % reflected right
                                 filter_L .* (-rapid_int);              % reflected right
         end
+
         
-        
-        % Get matrix representation of iFluidTensor and pemute spacial index
+        % Get matrix representation of fluidcell and permute spacial index
         % to first.
         x_g         = permute(obj.x_grid, [2 1 3]); % (M,N,Nt)
         rapid_g     = permute(obj.rapid_grid, [2 1 3]);
@@ -292,7 +304,8 @@ methods (Access = public)
             x_i     = x_int(:,:,i);
             mat_g   = mat_grid(:,:,i);   
             
-            if extrapolate
+            if extrap
+                % Extrapolate beyond the defined grids
                 mat_tmp = interp2( rapid_g, x_g, mat_g, rapid_i(:), x_i(:), 'spline');
             else
                 % Set all extrapolation values to zero!

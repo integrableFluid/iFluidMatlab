@@ -352,7 +352,7 @@ methods (Access = public)
         
         if nargin == 3
             % Convert SI --> TBA
-%             TBA_couplings   = obj.convert2TBA(TBA_couplings, 'couplings');
+            % TBA_couplings   = obj.convert2TBA(TBA_couplings, 'couplings');
             [theta, e_eff]  = calcThermalState@LiebLinigerModel(obj, T, TBA_couplings);
         else
             [theta, e_eff]  = calcThermalState@LiebLinigerModel(obj, T);

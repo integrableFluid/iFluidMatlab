@@ -39,7 +39,7 @@ methods (Access = public)
 
             
         % Calculate diffusion kernel
-        W           = 0.5*rhoP.*(1-theta).*T_dr.^2 .* abs(v_eff - v_eff.t());
+        W           = rhoP.*(1-theta).*T_dr.^2 .* abs(v_eff - v_eff.t());
         w           = sum( W.*obj.rapid_w, 1); 
         DT          = rhoS.^(-2).*(I.*w./obj.rapid_w - W).*sqrt(obj.rapid_w.*permute(obj.rapid_w, [4 2 3 1]));
         
@@ -47,7 +47,7 @@ methods (Access = public)
         R           = (I - T.*(theta.*obj.rapid_w))./rhoS;   
         theta_x     = obj.gradient_space(obj.x_grid, theta);
         temp        = double( R\(DT*theta_x) );   
-        D           = R*obj.gradient_space(obj.x_grid, temp);
+        D           = 0.5*R*obj.gradient_space(obj.x_grid, temp);
         
     end
 

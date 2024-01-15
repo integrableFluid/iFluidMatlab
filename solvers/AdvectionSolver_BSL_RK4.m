@@ -51,6 +51,9 @@ methods (Access = protected)
       
 
     function [x_d, r_d, v_n, a_n] = calculateDeparturePoints(obj, theta, t, dt)
+        % Note, for interpolation of velocities, always extrapolate (true)
+        % but ignore boundary conditions (false).
+
 
         % not used
         v_n     = 0;
@@ -82,16 +85,16 @@ methods (Access = protected)
             iter        = 1;
             while error > obj.settings.tol && iter <= obj.settings.max_iter
                 % departure point velocities
-                v1          = obj.interpPhaseSpace(V{1,1}, r_d, x_d, true);
-                a1          = obj.interpPhaseSpace(V{2,1}, r_d, x_d, true);
+                v1          = obj.interpPhaseSpace(V{1,1}, r_d, x_d, true, false);
+                a1          = obj.interpPhaseSpace(V{2,1}, r_d, x_d, true, false);
                 
                 % first midpoint velocities
-                v2          = obj.interpPhaseSpace(veff_mid, r_d+dt/2*a1, x_d+dt/2*v1, true);
-                a2          = obj.interpPhaseSpace(aeff_mid, r_d+dt/2*a1, x_d+dt/2*v1, true);
+                v2          = obj.interpPhaseSpace(veff_mid, r_d+dt/2*a1, x_d+dt/2*v1, true, false);
+                a2          = obj.interpPhaseSpace(aeff_mid, r_d+dt/2*a1, x_d+dt/2*v1, true, false);
                 
                 % second midpoint velocities
-                v3          = obj.interpPhaseSpace(veff_mid, r_d+dt/2*a2, x_d+dt/2*v2, true);
-                a3          = obj.interpPhaseSpace(aeff_mid, r_d+dt/2*a2, x_d+dt/2*v2, true);
+                v3          = obj.interpPhaseSpace(veff_mid, r_d+dt/2*a2, x_d+dt/2*v2, true, false);
+                a3          = obj.interpPhaseSpace(aeff_mid, r_d+dt/2*a2, x_d+dt/2*v2, true, false);
 
                 % arrival point velocities
                 v4          = veff_end;
@@ -113,20 +116,20 @@ methods (Access = protected)
             % first midpoint estimate
             x_star1     = obj.x_grid - dt/2*V{1,1};
             r_star1     = obj.rapid_grid - dt/2*V{2,1};
-            veff_star1  = obj.interpPhaseSpace(veff_mid, r_star1, x_star1, true);
-            aeff_star1  = obj.interpPhaseSpace(aeff_mid, r_star1, x_star1, true);
+            veff_star1  = obj.interpPhaseSpace(veff_mid, r_star1, x_star1, true, false);
+            aeff_star1  = obj.interpPhaseSpace(aeff_mid, r_star1, x_star1, true, false);
         
             % second midpoint estimate
             x_star2     = obj.x_grid - dt/2*veff_star1;
             r_star2     = obj.rapid_grid - dt/2*aeff_star1;
-            veff_star2  = obj.interpPhaseSpace(veff_mid, r_star2, x_star2, true);
-            aeff_star2  = obj.interpPhaseSpace(aeff_mid, r_star2, x_star2, true);
+            veff_star2  = obj.interpPhaseSpace(veff_mid, r_star2, x_star2, true, false);
+            aeff_star2  = obj.interpPhaseSpace(aeff_mid, r_star2, x_star2, true, false);
             
             % endpoint estimate
             x_star3     = obj.x_grid - dt*veff_star2;
             r_star3     = obj.rapid_grid - dt*aeff_star2;
-            veff_star3  = obj.interpPhaseSpace(veff_end, r_star3, x_star3, true);
-            aeff_star3  = obj.interpPhaseSpace(aeff_end, r_star3, x_star3, true);
+            veff_star3  = obj.interpPhaseSpace(veff_end, r_star3, x_star3, true, false);
+            aeff_star3  = obj.interpPhaseSpace(aeff_end, r_star3, x_star3, true, false);
             
             % calculate departure points
             x_d         = obj.x_grid - dt/6*( V{1,1} + 2*veff_star1 + 2*veff_star2 + veff_star3 );

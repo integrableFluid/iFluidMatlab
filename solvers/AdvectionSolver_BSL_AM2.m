@@ -72,6 +72,9 @@ methods (Access = protected)
       
 
     function [x_d, r_d, v_n, a_n] = calculateDeparturePoints(obj, theta, t, dt)
+        % Note, for interpolation of velocities, always extrapolate (true)
+        % but ignore boundary conditions (false).
+
         if ~obj.settings.extrap_velocity
             % use analytic derivative to estimate velocities at next step
             V      = obj.calcVelocityDerivatives(obj.settings.deriv_order, theta, t);
@@ -99,8 +102,8 @@ methods (Access = protected)
         error       = 1;
         iter        = 1;
         while error > obj.settings.tol && iter <= obj.settings.max_iter
-            v_n_star    = obj.interpPhaseSpace(v_n, r_n, x_n, true);
-            a_n_star    = obj.interpPhaseSpace(a_n, r_n, x_n, true);
+            v_n_star    = obj.interpPhaseSpace(v_n, r_n, x_n, true, false);
+            a_n_star    = obj.interpPhaseSpace(a_n, r_n, x_n, true, false);
             
             Gx          = obj.x_grid - x_n - dt/2*(v_p + v_n_star);
             Gr          = obj.rapid_grid - r_n - dt/2*(a_p + a_n_star);

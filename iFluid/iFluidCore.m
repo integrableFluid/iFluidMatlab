@@ -54,8 +54,9 @@ properties (Access = protected)
     
     % Optional parameters (default values specified here). 
     tolerance       = 1e-6;     % Tolerance for TBA solution
-    maxcount        = 1000;      % Max interations for TBA solution
-    homoEvol        = false;    % Homogeneous evolution
+    maxcount        = 1000;     % Max interations for TBA solution
+    TBA_solver      = 'Picard'; % Scheme for solving implicit TBA eq
+    homoEvol        = false;    % Homogeneous evolution. if true, dont calculate effective acceleration
 
 end % end protected properties
 

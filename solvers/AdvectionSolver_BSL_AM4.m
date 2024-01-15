@@ -80,6 +80,9 @@ methods (Access = protected)
       
 
     function [x_d, r_d, v_n, a_n] = calculateDeparturePoints(obj, theta, t, dt)
+        % Note, for interpolation of velocities, always extrapolate (true)
+        % but ignore boundary conditions (false).
+
         if ~obj.settings.extrap_velocity
             % use analytic derivative to estimate velocities at next step
             V      = obj.calcVelocityDerivatives(obj.settings.deriv_order, theta, t);
@@ -107,8 +110,8 @@ methods (Access = protected)
         error       = 1;
         iter        = 1;
         while error > obj.settings.tol && iter <= obj.settings.max_iter
-            v_n_star    = obj.interpPhaseSpace(v_n, r_n, x_n, true);
-            a_n_star    = obj.interpPhaseSpace(a_n, r_n, x_n, true);
+            v_n_star    = obj.interpPhaseSpace(v_n, r_n, x_n, true, false);
+            a_n_star    = obj.interpPhaseSpace(a_n, r_n, x_n, true, false);
             
             x_m         = obj.x_grid + 4*(obj.x_grid - x_n) - 2*dt*(2*v_n_star + v_p);
             r_m         = obj.rapid_grid + 4*(obj.rapid_grid - r_n) - 2*dt*(2*a_n_star + a_p);
@@ -116,11 +119,11 @@ methods (Access = protected)
             x_mm        = obj.x_grid + 27*(obj.x_grid - x_n) - 6*dt*(3*v_n_star + 2*v_p);
             r_mm        = obj.rapid_grid + 27*(obj.rapid_grid - r_n) - 6*dt*(3*a_n_star + 2*a_p);
             
-            v_m_star    = obj.interpPhaseSpace(obj.v_m, r_m, x_m, true);
-            a_m_star    = obj.interpPhaseSpace(obj.a_m, r_m, x_m, true);
+            v_m_star    = obj.interpPhaseSpace(obj.v_m, r_m, x_m, true, false);
+            a_m_star    = obj.interpPhaseSpace(obj.a_m, r_m, x_m, true, false);
             
-            v_mm_star   = obj.interpPhaseSpace(obj.v_mm, r_mm, x_mm, true);
-            a_mm_star   = obj.interpPhaseSpace(obj.a_mm, r_mm, x_mm, true);
+            v_mm_star   = obj.interpPhaseSpace(obj.v_mm, r_mm, x_mm, true, false);
+            a_mm_star   = obj.interpPhaseSpace(obj.a_mm, r_mm, x_mm, true, false);
             
             Gx          = obj.x_grid - x_n - dt/24*(9*v_p + 19*v_n_star - 5*v_m_star + v_mm_star);
             Gr          = obj.rapid_grid - r_n - dt/24*(9*a_p + 19*a_n_star - 5*a_m_star + a_mm_star);

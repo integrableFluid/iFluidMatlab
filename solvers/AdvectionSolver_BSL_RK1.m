@@ -52,6 +52,9 @@ methods (Access = protected)
       
 
     function [x_d, r_d, v_n, a_n] = calculateDeparturePoints(obj, theta, t, dt)
+        % Note, for interpolation of velocities, always extrapolate (true)
+        % but ignore boundary conditions (false).
+
         [veff, aeff] = obj.model.calcEffectiveVelocities(theta, t); 
             
         v_n = 0;
@@ -65,8 +68,8 @@ methods (Access = protected)
             error       = 1;
             iter        = 1;
             while error > obj.settings.tol && iter <= obj.settings.max_iter
-                veff_d      = obj.interpPhaseSpace(veff, (obj.rapid_grid+r_d)/2, (obj.x_grid+x_d)/2, true);
-                aeff_d      = obj.interpPhaseSpace(aeff, (obj.rapid_grid+r_d)/2, (obj.x_grid+x_d)/2, true);
+                veff_d      = obj.interpPhaseSpace(veff, (obj.rapid_grid+r_d)/2, (obj.x_grid+x_d)/2, true, false);
+                aeff_d      = obj.interpPhaseSpace(aeff, (obj.rapid_grid+r_d)/2, (obj.x_grid+x_d)/2, true, false);
 
                 Gx          = obj.x_grid - x_d - dt*veff_d;
                 Gr          = obj.rapid_grid - r_d - dt*aeff_d;
