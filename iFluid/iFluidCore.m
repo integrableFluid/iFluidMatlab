@@ -53,9 +53,9 @@ properties (Access = protected)
     couplings       = []; % @(t,x) coupling #i
     
     % Optional parameters (default values specified here). 
-    tolerance       = 1e-6;     % Tolerance for TBA solution
+    tolerance       = 1e-10;     % Tolerance for TBA solution
     maxcount        = 1000;     % Max interations for TBA solution
-    TBA_solver      = 'Picard'; % Scheme for solving implicit TBA eq
+    TBA_solver      = 'Newton'; % Scheme for solving implicit TBA eq
     homoEvol        = false;    % Homogeneous evolution. if true, dont calculate effective acceleration
 
 end % end protected properties
@@ -174,16 +174,20 @@ methods (Access = public)
     end
 
     
-    function F = getFreeEnergy(obj, e_eff)
+    function [F, dF_de] = getFreeEnergy(obj, e_eff)
         switch obj.quasiSpecies
         case 'fermion'
-            F = -log( 1 + exp(-e_eff));
+            F       = -log( 1 + exp(-e_eff));
+            dF_de   = (exp(e_eff) + 1).^(-1);
         case 'boson'
-            F = log( 1 - exp(-e_eff));
+            F       = log( 1 - exp(-e_eff));
+            dF_de   = (exp(e_eff) - 1).^(-1);
         case 'classical'
-            F = -exp(-e_eff);
+            F       = -exp(-e_eff);
+            dF_de   = exp(-e_eff);
         case 'radiative'
-            F = log( e_eff );
+            F       = log( e_eff );
+            dF_de   = e_eff.^(-1);
         otherwise
             error(['Quasi-particle species ' obj.quasiSpecies ' is not implemented! Check spelling and cases!'])
         end 
@@ -630,42 +634,107 @@ methods (Access = public)
     end
     
     
+    % function e_eff = calcEffectiveEnergy(obj, w, t, x)
+    %     % =================================================================
+    %     % Purpose : Calculates pseudo-energy of thermal state.
+    %     % Input :   T     -- Temperature
+    %     %           t     -- time (scalar)
+    %     %           x     -- x-coordinate (can be scalar or vector)
+    %     %           rapid -- rapid-coordinate (can be scalar or vector)
+    %     %           type  -- quasiparticle type (can be scalar or vector)
+    %     % Output:   e_eff -- Pesudo-energy of thermal state 
+    %     % =================================================================
+    %     kernel      = 1/(2*pi)*obj.getScatteringRapidDeriv(t, x, obj.rapid_grid, obj.rapid_aux, obj.type_grid, obj.type_aux );
+    % 
+    %     e_eff       = fluidcell.zeros(obj.N, size(w,2), obj.Ntypes);
+    %     e_eff_old   = fluidcell.zeros(obj.N, size(w,2), obj.Ntypes);
+    %     error_rel   = 1;
+    %     count       = 0;
+    % 
+    %     % Solve TBA eq. for epsilon(k) by iteration:
+    %     % Using epsilonk_old, update epsilon_k until convergence is reached 
+    %     % (difference between epsilonk_old and epsilon_k becomes less than tol)
+    %     while any(error_rel > obj.tolerance) & count < obj.maxcount % might change this
+    % 
+    %         % calculate epsilon(k) from integral equation using epsilonk_old
+    %         % i.e. update epsilon^[n] via epsilon^[n-1]            
+    %         e_eff       = w - kernel*(obj.rapid_w .* obj.getFreeEnergy(e_eff_old));
+    % 
+    %         % calculate error
+    %         v1          = flatten(e_eff);
+    %         v2          = flatten(e_eff_old);
+    % 
+    %         sumeff      = sum( v1.^2 ,1);            
+    %         error_rel   = squeeze(sum( (v1 - v2).^2, 1)./sumeff);
+    %         e_eff_old   = e_eff;
+    % 
+    %         count       = count+1;
+    %     end
+    % end
+
     function e_eff = calcEffectiveEnergy(obj, w, t, x)
-        % =================================================================
-        % Purpose : Calculates pseudo-energy of thermal state.
-        % Input :   T     -- Temperature
-        %           t     -- time (scalar)
-        %           x     -- x-coordinate (can be scalar or vector)
-        %           rapid -- rapid-coordinate (can be scalar or vector)
-        %           type  -- quasiparticle type (can be scalar or vector)
-        % Output:   e_eff -- Pesudo-energy of thermal state 
-        % =================================================================
-        kernel      = 1/(2*pi)*obj.getScatteringRapidDeriv(t, x, obj.rapid_grid, obj.rapid_aux, obj.type_grid, obj.type_aux );
-                
-        e_eff       = fluidcell.zeros(obj.N, size(w,2), obj.Ntypes);
-        e_eff_old   = fluidcell.zeros(obj.N, size(w,2), obj.Ntypes);
+        % Overloaded from superclass (iFluidCore)
+        % w is source term
+
+        % NOTE: for he magnons, the kernel needs to be periodic in rapidity
+        kernel      = 1/(2*pi)*obj.getScatteringRapidDeriv(t, x, obj.rapid_grid, obj.rapid_aux, obj.type_grid, obj.type_aux );       
+
+        e_eff       = fluidcell(w);
+        e_eff_old   = fluidcell(w);
         error_rel   = 1;
         count       = 0;
         
         % Solve TBA eq. for epsilon(k) by iteration:
         % Using epsilonk_old, update epsilon_k until convergence is reached 
         % (difference between epsilonk_old and epsilon_k becomes less than tol)
-        while any(error_rel > obj.tolerance) & count < obj.maxcount % might change this
-            
-            % calculate epsilon(k) from integral equation using epsilonk_old
-            % i.e. update epsilon^[n] via epsilon^[n-1]            
-            e_eff       = w - kernel*(obj.rapid_w .* obj.getFreeEnergy(e_eff_old));
-            
-            % calculate error
-            v1          = flatten(e_eff);
-            v2          = flatten(e_eff_old);
-            
-            sumeff      = sum( v1.^2 ,1);            
-            error_rel   = squeeze(sum( (v1 - v2).^2, 1)./sumeff);
-            e_eff_old   = e_eff;
+    
+        switch obj.TBA_solver
 
-            count       = count+1;
+        case 'Picard'
+            while any(error_rel > obj.tolerance) & count < obj.maxcount % might change this
+                
+                % calculate epsilon(k) from integral equation using epsilonk_old
+                % i.e. update epsilon^[n] via epsilon^[n-1]      
+                e_eff       = w - kernel*(obj.rapid_w .* obj.getFreeEnergy(e_eff_old));
+     
+                % calculate error
+                v1          = flatten(e_eff);
+                v2          = flatten(e_eff_old);
+    
+                sumeff      = sum( v1.^2 ,1);            
+                error_rel   = squeeze(sum( (v1 - v2).^2, 1)./sumeff);
+                e_eff_old   = e_eff;
+                
+                count       = count+1;
+            end
+
+        case 'Newton'
+            while any(error_rel > obj.tolerance) & count < obj.maxcount % might change this
+                
+                I       = fluidcell.eye(obj.N, obj.Ntypes);
+                [F, dF] = obj.getFreeEnergy(e_eff);
+    
+                G       = e_eff - ( w - kernel*(obj.rapid_w.*F) );
+                dGde    = I + kernel*(obj.rapid_w.*(I.*dF) );
+    
+                e_eff   = e_eff - (dGde+eps)\G;               
+
+     
+                % calculate error
+                v1          = flatten(e_eff);
+                v2          = flatten(e_eff_old);
+    
+                sumeff      = sum( v1.^2 ,1);            
+                error_rel   = squeeze(sum( (v1 - v2).^2, 1)./sumeff);
+                e_eff_old   = e_eff;
+                
+                count       = count+1;
+            end           
+        otherwise
+            error('The specified TBA solver has not been implemented.')
         end
+
+        fprintf('TBA equation converged with tolerance %d in %d iterations.\n', obj.tolerance, count);
     end
     
     
