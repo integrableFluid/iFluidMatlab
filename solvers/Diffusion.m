@@ -3,6 +3,7 @@ classdef Diffusion < AdvectionSource
     
 properties (Access = protected)
 
+    amp_fact; % factor for increasing the amplitude of diffusion
     
     
 end % end protected properties
@@ -14,7 +15,14 @@ methods (Access = public)
     function obj = Diffusion(model, varargin)        
         obj = obj@AdvectionSource(model, varargin{:});
              
+        % Parse inputs from varargin
+        parser = inputParser;
+        parser.KeepUnmatched = true;
 
+        addParameter(parser, 'amp_fact', 1, @(x) x >= 0);
+
+        parse(parser,varargin{:});
+        obj.amp_fact = parser.Results.amp_fact;
     end
     
 
@@ -47,7 +55,7 @@ methods (Access = public)
         R           = (I - T.*(theta.*obj.rapid_w))./rhoS;   
         theta_x     = obj.gradient_space(obj.x_grid, theta);
         temp        = double( R\(DT*theta_x) );   
-        D           = 0.5*R*obj.gradient_space(obj.x_grid, temp);
+        D           = obj.amp_fact * 0.5*R*obj.gradient_space(obj.x_grid, temp);
         
     end
 

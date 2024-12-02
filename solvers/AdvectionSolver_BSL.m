@@ -249,13 +249,19 @@ methods (Access = public)
         % =================================================================
         
         % Handle varargin 
-        defaultValues = { obj.settings.extrapolate,
+        defaultValues = { obj.settings.extrapolate, ...
                           obj.settings.periodic_BC | obj.settings.reflective_BC }; 
 
         idx = ~cellfun(@isempty,varargin);  % find which parameters have changed
         defaultValues(idx)  = varargin(idx); % replace the changed ones
         [extrap, enforce_BC]= defaultValues{:};  
 
+
+        % interpolation method
+        method = 'spline';
+        if GPU_mode_on()
+            method = 'cubic';
+        end
 
 
         % Cast to matrix form
@@ -306,10 +312,10 @@ methods (Access = public)
             
             if extrap
                 % Extrapolate beyond the defined grids
-                mat_tmp = interp2( rapid_g, x_g, mat_g, rapid_i(:), x_i(:), 'spline');
+                mat_tmp = interp2( rapid_g, x_g, mat_g, rapid_i(:), x_i(:), method);
             else
                 % Set all extrapolation values to zero!
-                mat_tmp = interp2( rapid_g, x_g, mat_g, rapid_i(:), x_i(:), 'spline', 0);
+                mat_tmp = interp2( rapid_g, x_g, mat_g, rapid_i(:), x_i(:), method, 0);
             end
            
             mat_tmp(isnan(mat_tmp)) = 0;

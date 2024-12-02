@@ -236,6 +236,13 @@ methods (Access = public)
         % Output:   tensor_int -- iFluidTensor interpolated to input grids.
         % =================================================================
         
+
+        % interpolation method
+        method = 'spline';
+        if GPU_mode_on()
+            method = 'cubic';
+        end
+
         % Cast to matrix form
         x_int       = double(x_int);
         rapid_int   = double(rapid_int);
@@ -281,10 +288,10 @@ methods (Access = public)
             mat_g   = mat_grid(:,:,i);   
             
             if extrapolate
-                mat_tmp = interp2( rapid_g, x_g, mat_g, rapid_i(:), x_i(:), 'spline');
+                mat_tmp = interp2( rapid_g, x_g, mat_g, rapid_i(:), x_i(:), method);
             else
                 % Set all extrapolation values to zero!
-                mat_tmp = interp2( rapid_g, x_g, mat_g, rapid_i(:), x_i(:), 'spline', 0);
+                mat_tmp = interp2( rapid_g, x_g, mat_g, rapid_i(:), x_i(:), method, 0);
             end
            
             mat_tmp(isnan(mat_tmp)) = 0;

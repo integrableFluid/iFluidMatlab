@@ -34,7 +34,7 @@ function h = plot_rapidity_distribution(rapid, Q)
         skip = ceil(N/8);
     
         
-        plot(rapid, squeeze(double(Q)) )
+        plot(rapid, squeeze(double(Q(:,1,:))) )
         hold on
         
         for k = 1:Ntypes % plot symbols for each type
@@ -57,7 +57,7 @@ function h = plot_rapidity_distribution(rapid, Q)
         
         for i = 1:Ntypes
         for j = 1:Ntypes
-            Q_plot = squeeze(double( Q(:,:,i,:,j)) );
+            Q_plot = squeeze(double( Q(:,1,i,:,j)) );
         
             nexttile
             imagesc(rapid, rapid, Q_plot);

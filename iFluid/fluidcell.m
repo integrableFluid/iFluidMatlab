@@ -120,7 +120,7 @@ methods ( Static )
             C = fluidcell( ones(dims) );
             
         else % input is list of sizes
-            C = fluidcell( ones(varargin) );
+            C = fluidcell( ones(varargin{:}) );
         end
     end
     
@@ -210,7 +210,11 @@ methods (Access = public)
         assert( isnumeric(x), 'Input must be a ND-array' )
         assert( ndims(x) <= 5, 'fluidcell can have max 5 dimensions!' )
         
-        obj.matrix = x;
+        if GPU_mode_on()
+            obj.matrix = gpuArray(x);
+        else 
+            obj.matrix = x;
+        end
     end
     
     
