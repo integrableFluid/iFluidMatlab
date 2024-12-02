@@ -62,6 +62,15 @@ function h = plot_rapidity_distribution(rapid, Q)
             nexttile
             imagesc(rapid, rapid, Q_plot);
 
+            if i == Ntypes
+            else
+                set(gca,'xticklabels',[])
+            end
+            if j == 1
+            else
+                set(gca,'yticklabels',[])
+            end
+
             h(i,j) = gca;
         end
         end
