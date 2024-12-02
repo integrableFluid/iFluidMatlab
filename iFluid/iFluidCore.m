@@ -751,6 +751,90 @@ methods (Access = public)
 
     end
     
+
+    function D = calcDrudeWeight(obj, c_idx, theta, t)
+        % =================================================================
+        % Purpose : Calculates Drude weight of specified charges.
+        % Input :   c_idx   -- charge indices
+        %           theta   -- filling function (iFluidTensor)
+        %           t       -- time (default value 0)
+        % Output:   D       -- matrix of Drude weights
+        % ================================================================= 
+        
+        if nargin < 4
+            t = 0;
+        end
+
+        D      = zeros(length(c_idx), length(c_idx), size(theta, 2));
+    
+        % calculate common part of Drude weight for all charges
+        rho     = obj.transform2rho(theta, t);
+        veff    = obj.calcEffectiveVelocities(theta, t);
+        f       = obj.getStatFactor(theta);
+        D_base  = obj.rapid_w.*rho.*f.*veff.^2;
+
+        % calculate dressed single-particle eigenvalues
+        hn_dr   = cell(1, length(c_idx));
+        for n = 1:length(c_idx)
+            hn      = obj.getOneParticleEV( c_idx(n), t, obj.x_grid, obj.rapid_grid);               
+            hn_dr{n}= obj.applyDressing(hn, theta, t);
+        end
+
+        % for each combination of charges, calculate Drude weight
+        for i = 1:length(c_idx)
+        for j = i:length(c_idx)
+            D_temp     = sum(sum(D_base.*hn_dr{i}.*hn_dr{j}, 1), 3);
+            D(i,j)     = permute(double(D_temp), [1 3 2]);
+            D(j,i)     = permute(double(D_temp), [1 3 2]);
+        end
+        end
+
+
+    end
+
+
+    function L = calcOnsagerMatrix(obj, c_idx, theta, t)
+        % =================================================================
+        % Purpose : Calculates Onsager matrix of specified charges.
+        % Input :   c_idx   -- charge indices
+        %           theta   -- filling function (iFluidTensor)
+        %           t       -- time (default value 0)
+        % Output:   L       -- Onsager matrix
+        % ================================================================= 
+        
+        if nargin < 4
+            t = 0;
+        end
+
+        L           = zeros(length(c_idx), length(c_idx), size(theta, 2));
+    
+        % calculate common part of Drude weight for all charges
+        [rho, rhoS] = obj.transform2rho(theta, t);
+        veff        = obj.calcEffectiveVelocities(theta, t);
+        f           = obj.getStatFactor(theta);
+        T           = 1/(2*pi)*obj.getScatteringRapidDeriv(t, obj.x_grid, obj.rapid_grid, obj.rapid_aux, obj.type_grid, obj.type_aux);
+        T_dr        = obj.applyDressing(T, theta, t);
+
+        L_base      = 0.5*obj.rapid_w.*permute(obj.rapid_w,[4 2 3 1]).*rho.*f.*rho.t().*f.t().*abs(veff - veff.t()).*T_dr.^2;
+
+        % calculate dressed single-particle eigenvalues
+        hn_dr       = cell(1, length(c_idx));
+        for n = 1:length(c_idx)
+            hn          = obj.getOneParticleEV( c_idx(n), t, obj.x_grid, obj.rapid_grid);               
+            hn_dr{n}    = obj.applyDressing(hn, theta, t);
+        end
+
+        % for each combination of charges, calculate Drude weight
+        for i = 1:length(c_idx)
+        for j = i:length(c_idx)
+            L_temp      = L_base .* ( hn_dr{i}.t()./rhoS.t() - hn_dr{i}./rhoS ) .* ( hn_dr{j}.t()./rhoS.t() - hn_dr{j}./rhoS );
+            L_temp      = sum( L_temp, [1, 3, 4, 5]); % sum over both rapidity and particle indices
+            L(i,j)     = permute(double(L_temp), [1 3 2]);
+            L(j,i)     = permute(double(L_temp), [1 3 2]);
+        end
+        end
+
+    end
     
     
 end % end public methods

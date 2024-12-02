@@ -323,7 +323,7 @@ methods (Access = public)
         
         if convert_output
         % Convert TBA --> SI
-        for i = length(c_idx)
+        for i = 1:length(c_idx)
             switch c_idx(i)
             case 0 % atomic density
                 q(:,:,i) = obj.convert2TBA(q(:,:,i), 'length'); % convert 'per length'
@@ -345,6 +345,55 @@ methods (Access = public)
         end
     end
     
+
+
+    function DW_SI = calcDrudeWeight(obj, c_idx, theta, t)
+        
+        if nargin < 4
+            t = 0;
+        end
+        
+        % Convert SI --> TBA
+        t = obj.convert2TBA(t, 'time');
+        
+        % Run LL function
+        DW_TBA = calcDrudeWeight@LiebLinigerModel(obj, c_idx, theta, t);
+        
+        % Convert TBA --> SI
+        DW_SI = obj.convert2TBA(DW_TBA, 'length'); % convert 'per length'
+
+        for i = 1:length(c_idx)
+        for j = 1:length(c_idx)
+
+            % Convert based on first index
+            switch c_idx(i)
+            case 0 % atomic density
+                % does nothing
+            case 1 % momentum density
+                DW_SI(i,j,:) = obj.convert2SI(DW_SI(i,j,:), 'momentum');                
+            case 2 % energy density
+                DW_SI(i,j,:) = obj.convert2SI(DW_SI(i,j,:), 'energy');                 
+            otherwise
+                disp(['Warning: No known unit of charge nr. ' num2str(c_idx(i))])
+            end
+
+            % Convert based on second index
+            switch c_idx(j)
+            case 0 % atomic density
+                % does nothing
+            case 1 % momentum density
+                DW_SI(i,j,:) = obj.convert2SI(DW_SI(i,j,:), 'momentum');                
+            case 2 % energy density
+                DW_SI(i,j,:) = obj.convert2SI(DW_SI(i,j,:), 'energy');                 
+            otherwise
+                disp(['Warning: No known unit of charge nr. ' num2str(c_idx(j))])
+            end
+        end
+        end
+        
+    end
+
+
     
     function [theta, e_eff] = calcThermalState(obj, T, TBA_couplings)
         % Convert SI --> TBA
