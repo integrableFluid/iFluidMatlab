@@ -1,4 +1,4 @@
-# iFluid: A MATLAB Library for Thermodynamic Bethe Ansatz and Generalized Hydrodynamics
+# iFluid: A MATLAB library for Thermodynamic Bethe Ansatz and Generalized Hydrodynamics
 
 `iFluid` is a MATLAB open-source library designed to solve equations related to the **Thermodynamic Bethe Ansatz (TBA)** and **Generalized Hydrodynamics (GHD)**. This framework is built to be highly flexible and extensible, making it easy for users to study integrable and near-integrable systems.
 
@@ -19,7 +19,7 @@
 
     Is solved using the `fluidcell` operators as 
      ```matlab
-     q_dr = (I - T.*transpose(dt.*v) / q;
+     q_dr = (I - T.*transpose(dt.*v) \ q;
      ```
 
 ### 🔍 **Advanced Solvers**
