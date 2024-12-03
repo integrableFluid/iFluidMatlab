@@ -619,6 +619,12 @@ methods (Access = public)
     
     
     function theta = calcFillingFraction(obj, e_eff)
+        % =================================================================
+        % Purpose : Calculate filling function for given pseudo-energy.
+        % Input :   e_eff -- pseudo-energy solution to Yang-Yang equation
+        % Output:   theta -- filling function
+        % =================================================================
+
         switch obj.quasiSpecies
         case 'fermion'
             theta = 1./( exp(e_eff) + 1);
@@ -633,50 +639,17 @@ methods (Access = public)
         end
     end
     
-    
-    % function e_eff = calcEffectiveEnergy(obj, w, t, x)
-    %     % =================================================================
-    %     % Purpose : Calculates pseudo-energy of thermal state.
-    %     % Input :   T     -- Temperature
-    %     %           t     -- time (scalar)
-    %     %           x     -- x-coordinate (can be scalar or vector)
-    %     %           rapid -- rapid-coordinate (can be scalar or vector)
-    %     %           type  -- quasiparticle type (can be scalar or vector)
-    %     % Output:   e_eff -- Pesudo-energy of thermal state 
-    %     % =================================================================
-    %     kernel      = 1/(2*pi)*obj.getScatteringRapidDeriv(t, x, obj.rapid_grid, obj.rapid_aux, obj.type_grid, obj.type_aux );
-    % 
-    %     e_eff       = fluidcell.zeros(obj.N, size(w,2), obj.Ntypes);
-    %     e_eff_old   = fluidcell.zeros(obj.N, size(w,2), obj.Ntypes);
-    %     error_rel   = 1;
-    %     count       = 0;
-    % 
-    %     % Solve TBA eq. for epsilon(k) by iteration:
-    %     % Using epsilonk_old, update epsilon_k until convergence is reached 
-    %     % (difference between epsilonk_old and epsilon_k becomes less than tol)
-    %     while any(error_rel > obj.tolerance) & count < obj.maxcount % might change this
-    % 
-    %         % calculate epsilon(k) from integral equation using epsilonk_old
-    %         % i.e. update epsilon^[n] via epsilon^[n-1]            
-    %         e_eff       = w - kernel*(obj.rapid_w .* obj.getFreeEnergy(e_eff_old));
-    % 
-    %         % calculate error
-    %         v1          = flatten(e_eff);
-    %         v2          = flatten(e_eff_old);
-    % 
-    %         sumeff      = sum( v1.^2 ,1);            
-    %         error_rel   = squeeze(sum( (v1 - v2).^2, 1)./sumeff);
-    %         e_eff_old   = e_eff;
-    % 
-    %         count       = count+1;
-    %     end
-    % end
 
     function e_eff = calcEffectiveEnergy(obj, w, t, x)
-        % Overloaded from superclass (iFluidCore)
-        % w is source term
+        % =================================================================
+        % Purpose : Solves Yang-Yang equation to obtain pseudo-energy of 
+        %           local equilibrium state.
+        % Input :   w     -- source term corresponding to GGE or thermal 
+        %           t     -- time (scalar)
+        %           x     -- x-coordinate (can be scalar or vector)
+        % Output:   e_eff -- Pesudo-energy corresponding to source term
+        % =================================================================
 
-        % NOTE: for he magnons, the kernel needs to be periodic in rapidity
         kernel      = 1/(2*pi)*obj.getScatteringRapidDeriv(t, x, obj.rapid_grid, obj.rapid_aux, obj.type_grid, obj.type_aux );       
 
         e_eff       = fluidcell(w);
@@ -684,10 +657,8 @@ methods (Access = public)
         error_rel   = 1;
         count       = 0;
         
-        % Solve TBA eq. for epsilon(k) by iteration:
-        % Using epsilonk_old, update epsilon_k until convergence is reached 
-        % (difference between epsilonk_old and epsilon_k becomes less than tol)
-    
+        % Solve Yang-Yang equation by iteration, using either Picard or
+        % Newtons method.    
         switch obj.TBA_solver
 
         case 'Picard'
