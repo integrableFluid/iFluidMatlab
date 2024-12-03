@@ -86,8 +86,22 @@ end % end protected abstract methods
 
 methods (Access = public)
     
-    % Superclass constructor
     function obj = iFluidCore(x_grid, rapid_grid, rapid_w, couplings, Ntypes, Options)        
+        % =================================================================
+        % Purpose : Superclass constructor. 
+        % Input :   x_grid     -- Vector containing position gridpoints
+        %           rapid_grid -- Vector containing rapidity gridpoints
+        %           rapid_w    -- Rapidity quadrature weights for integrals
+        %           couplings  -- Cell array of anonymous functions for the
+        %                          couplings of the specific function. 
+        %                          May also include spatial and temporal
+        %                          derivatives of the couplings.
+        %           Ntypes     -- Number of quasiparticle species/types
+        %           Options    -- Struct containing values for optional 
+        %                          parameters (see class Properties) 
+        % Output:   obj        -- iFluidCore object
+        % ================================================================= 
+        
         % Check format of input
         if ~isvector(x_grid) || ~isvector(rapid_grid)
             error('Input has wrong format!')
@@ -220,10 +234,10 @@ methods (Access = public)
     function [rho, rhoS] = transform2rho(obj, theta, t_array)
         % =================================================================
         % Purpose : Transforms filling function into root density.
-        % Input :   theta   -- filling function (cell array of iFluidTensor)
+        % Input :   theta   -- filling function (cell array of ifluidcell)
         %           t_array -- array of times corresponding to theta
-        % Output:   rho     -- root density (cell array of iFluidTensor)
-        %           rhoS    -- density of states (cell array of iFluidTensor)
+        % Output:   rho     -- root density (cell array of ifluidcell)
+        %           rhoS    -- density of states (cell array of ifluidcell)
         % =================================================================   
         
         if iscell(theta)
@@ -265,10 +279,10 @@ methods (Access = public)
     function [theta, rhoS] = transform2theta(obj, rho, t_array)
         % =================================================================
         % Purpose : Transforms root density into filling function.
-        % Input :   rho     -- root density (cell array of iFluidTensor)
+        % Input :   rho     -- root density (cell array of ifluidcell)
         %           t_array -- array of times corresponding to theta
-        % Output:   theta   -- filling function (cell array of iFluidTensor)
-        %           rhoS    -- density of states (cell array of iFluidTensor)
+        % Output:   theta   -- filling function (cell array of ifluidcell)
+        %           rhoS    -- density of states (cell array of ifluidcell)
         % =================================================================
         
         if iscell(rho)
@@ -311,7 +325,7 @@ methods (Access = public)
         % Purpose : Calculates expectation values of charge densities and
         %           associated currents.
         % Input :   c_idx   -- charge indices
-        %           theta   -- filling function (cell array of iFluidTensor)
+        %           theta   -- filling function (cell array of ifluidcell)
         %           t_array -- array of times corresponding to theta
         %           varargin-- optional arguments:
         %                       calc_formfactors (default = false)
@@ -421,10 +435,10 @@ methods (Access = public)
         % =================================================================
         % Purpose : Calculates effective velocity and acceleration of
         %           quasiparticles.
-        % Input :   theta -- filling function (iFluidTensor)
+        % Input :   theta -- filling function (ifluidcell)
         %           t     -- time (scalar)
-        % Output:   v_eff -- Effective velocity (iFluidTensor)
-        %           a_eff -- Effective acceleration (iFluidTensor)
+        % Output:   v_eff -- Effective velocity (ifluidcell)
+        %           a_eff -- Effective acceleration (ifluidcell)
         % =================================================================
         if length(varargin) == 0
             % No extra arguments given, use default grids
@@ -456,13 +470,13 @@ methods (Access = public)
         % =================================================================
         % Purpose : Calculates effective velocity and acceleration of
         %           quasiparticles.
-        % Input :   theta -- filling function (fluidtensor)
+        % Input :   theta -- filling function (fluidcell)
         %           t     -- time (scalar)
         %           x     -- x-coordinate (can be scalar or vector)
         %           rapid -- rapid-coordinate (can be scalar or vector)
         %           type  -- quasiparticle type (can be scalar or vector)
-        % Output:   v_eff -- Effective velocity (fluidtensor)
-        %           a_eff -- Effective acceleration (fluidtensor)
+        % Output:   v_eff -- Effective velocity (fluidcell)
+        %           a_eff -- Effective acceleration (fluidcell)
         % =================================================================
         
         de_dr   = obj.applyDressing(obj.getEnergyRapidDeriv(t, x, rapid, type), theta, t);
@@ -507,11 +521,11 @@ methods (Access = public)
         % =================================================================
         % Purpose : Calculates effective velocity and acceleration of
         %           quasiparticles.
-        % Input :   theta -- filling function (fluidtensor)
+        % Input :   theta -- filling function (fluidcell)
         %           t     -- time (scalar)
-        %           D     -- dressing operator (fluidtensor)
-        % Output:   v_eff -- Effective velocity (fluidtensor)
-        %           a_eff -- Effective acceleration (fluidtensor)
+        %           D     -- dressing operator (fluidcell)
+        % Output:   v_eff -- Effective velocity (fluidcell)
+        %           a_eff -- Effective acceleration (fluidcell)
         % =================================================================
         x       = obj.x_grid;
         rapid   = obj.rapid_grid;
@@ -562,9 +576,9 @@ methods (Access = public)
         % =================================================================
         % Purpose : Dresses quantity Q by solving system of linear eqs.
         % Input :   Q     -- Quantity to be dressed
-        %           theta -- filling function (fluidtensor)
+        %           theta -- filling function (fluidcell)
         %           t     -- time (scalar)
-        % Output:   Q_dr  -- Dressed quantity (fluidtensor)
+        % Output:   Q_dr  -- Dressed quantity (fluidcell)
         % =================================================================
         if ~isa(Q, 'fluidcell')
             Q = fluidcell(Q);
@@ -589,6 +603,15 @@ methods (Access = public)
     
     
     function Q_dr = dress(obj, Q, Uinv)
+        % =================================================================
+        % Purpose : Dresses a quantity using an inverted dressing kernel.
+        %           This is faster when dressing multiple quantities with
+        %           the same kernel
+        % Input :   Q     -- bare/undressed quantity
+        %           Uinv  -- inverted dressing operator (fluidcell)
+        % Output:   Q_dr  -- dresse quantity
+        % =================================================================
+
         if ~isa(Q, 'fluidcell')
             Q = fluidcell(Q);
         end
@@ -606,9 +629,9 @@ methods (Access = public)
     function Uinv = calcDressingOperator(obj, theta, t)
         % =================================================================
         % Purpose : Returns the dressing operator used to dress functions.
-        % Input :   theta -- filling function (fluidtensor)
+        % Input :   theta -- filling function (fluidcell)
         %           t     -- time (scalar)
-        % Output:   Uinv  -- Dressing operator (fluidtensor)
+        % Output:   Uinv  -- Dressing operator (fluidcell)
         % =================================================================
         
         kernel  = 1/(2*pi)*obj.getScatteringRapidDeriv(t, obj.x_grid, obj.rapid_grid, obj.rapid_aux, obj.type_grid, obj.type_aux);        
@@ -727,7 +750,7 @@ methods (Access = public)
         % =================================================================
         % Purpose : Calculates Drude weight of specified charges.
         % Input :   c_idx   -- charge indices
-        %           theta   -- filling function (iFluidTensor)
+        %           theta   -- filling function (ifluidcell)
         %           t       -- time (default value 0)
         % Output:   D       -- matrix of Drude weights
         % ================================================================= 
@@ -768,7 +791,7 @@ methods (Access = public)
         % =================================================================
         % Purpose : Calculates Onsager matrix of specified charges.
         % Input :   c_idx   -- charge indices
-        %           theta   -- filling function (iFluidTensor)
+        %           theta   -- filling function (ifluidcell)
         %           t       -- time (default value 0)
         % Output:   L       -- Onsager matrix
         % ================================================================= 
