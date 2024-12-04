@@ -1,7 +1,58 @@
-# iFluid
+# iFluid: A MATLAB library for Thermodynamic Bethe Ansatz and Generalized Hydrodynamics
 
-iFluid (or integrable-Fluid) is a Matlab framework for simulating the dynamics of integrable models using the theory of generalized hydrodynamics (GHD). The framework implementes all the basic equations of GHD while abstracting the specific models and numerical solvers. Thus, users can extend the framework to build their own applications.
+`iFluid` is a MATLAB open-source library designed to solve equations related to the **Thermodynamic Bethe Ansatz (TBA)** and **Generalized Hydrodynamics (GHD)**. This framework is built to be highly flexible and extensible, making it easy for users to study integrable and near-integrable systems.
 
+## Features
+
+### 🛠 **Flexible, Extensible Framework**
+- The core TBA and GHD equations are implemented in the **abstract class** `iFluidCore`, providing a universal backbone.
+- Users can extend this class to implement **custom models** by defining model-specific properties such as scattering kernels.
+- Pre-built support for popular models, including Hard rods, Lieb-Liniger, sine-Gordon, and XXZ spin chain.
+
+### 🧮 **Custom `fluidcell` Data Structure**
+- A specialized wrapper for MATLAB N-D arrays with overloaded operators for efficient kernel operations, including:
+  - **Matrix multiplication (`*`)**: Simplifies convolutions over rapidity and quasi-particle types.
+  - **Matrix "division" (`\`)**: Solves linear systems (e.g., for dressing operations) by inverting kernel.
+  - **Example:** The discrete (implicit) dressing equation
+
+    $$q_a^{\mathrm{dr}} (\theta_i) = \sum_{b,j} \left[I_{a,b} (\theta_i - \theta_j)  q_b (\theta_j) - d\theta_j T_{a,b} (\theta_i - \theta_j)  \vartheta_b(\theta_j)  q_b^{\mathrm{dr}}(\theta_j) \right] $$
+
+    Is solved using the `fluidcell` operators as 
+     ```matlab
+     q_dr = (I - T.*transpose(dt.*v) \ q;
+     ```
+
+### 🔍 **Advanced Solvers**
+- A modular implementation of the **GHD partial differential equation solver**:
+  - Abstract solver design allows users to implement custom solvers.
+  - Pre-included solvers are based on **Backwards Semi-Lagrangian (BSL)** methods.
+  - Supports higher-order integration (Runge-Kutta up to 4th order) for solving characteristic equations.
+
+### ✨ **Beyond Euler-scale**
+- Built-in functionality for:
+  - **Position and time dependent couplings** (and associated effective accelerations).  
+  - Higher-order GHD with **diffusion**.
+  - Collision integrals for systems with **non-integrable perturbations**.
+
+### 🚀 **GPU Support**
+- Accelerate calculations using MATLAB's built-in **GPU arrays**.
+- Particularly beneficial for simulations with large rapidity grids.
+
+### 🌊 **Zero-Temperature & Whitham Theory**
+- A dedicated sub-library for **zero-temperature/ground state calculations**:
+  - State parameterization using **Fermi contours**, i.e. water-bag simulations.
+  - Includes tools for **Whitham modulation theory**, enabling the study of **dispersive shock waves**.
+
+## Installation
+
+Clone this repository to your local machine:
+```bash
+git clone https://github.com/your-username/iFluid.git
+```
+Then add the library to your MATLAB path:
+```matlab
+addpath('path/to/iFluid');
+```
 
 ## Citation
 When publishing calculations performed with iFluid, please cite the [iFluid paper](https://arxiv.org/abs/2001.02547). 
@@ -9,21 +60,9 @@ When publishing calculations performed with iFluid, please cite the [iFluid pape
 Details and benchmarks of the Backward Semi-Lagragian schemes are documented [in this paper](https://arxiv.org/abs/2212.12349).
 
 ## Documentation
-The complete iFluid documentation can be found [here!](https://integrablefluid.github.io/iFluidDocumentation/)
+Documentation for adding new models and solvers can be found [here!](https://integrablefluid.github.io/iFluidDocumentation/)
 
-## Published papers using iFluid
-
-[Phys. Rev. X 12, 041032 (2022)](https://journals.aps.org/prx/abstract/10.1103/PhysRevX.12.041032)
-
-[SciPost Phys. 12, 115 (2022)](https://www.scipost.org/SciPostPhys.12.3.115?acad_field_slug=mathematics)
-
-[Journal of High Energy Physics 2022, 35 (2022)](https://link.springer.com/article/10.1007/JHEP04(2022)035)
-
-[Phys. Rev. Lett. 126, 090602 (2021)](https://doi.org/10.1103/PhysRevLett.126.090602)
-
-[SciPost Phys. Core 3, 016 (2020)](https://scipost.org/SciPostPhysCore.3.2.016)
-
-[SciPost Phys. 8, 041 (2020)](https://scipost.org/SciPostPhys.8.3.041)
+For ussage of iFluid, see example scripts located in the \Examples folder.
 
 ## References
 iFluid uses the following scripts for utility purposes. They can be found in the \utils folder.
