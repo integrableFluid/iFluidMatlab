@@ -1,30 +1,35 @@
-function contour_t = propagate_contour_constpiston_linear(K0, t_array, vp, veff_func, M_DSW)
+function contour_t = propagate_contour_piston_linear(contour, t_array, K0, xp_func, vp_func, veff_func)
     % =====================================================================
     % Purpose : Propagate Fermi contour under the action of a constant
-    %           velocity piston using Matlab ODE45. 
-    %           Piston moves from left to right and starts at position x=0.
-    % Input :   K0        -- Fermi momentum of initial contour/background
+    %           velocity piston using linear step updates.
+    %           The output contour contains only points that have been in
+    %           contact with the piston and points in the initial input
+    %           contour.
+    %           Otherwise, it is assumed that the piston moves though a
+    %           homogeneous background Fermi sea [-K0; K0], and that the 
+    %           piston moves from left to right.
+    % Input :   contour   -- Initial contour with each row = (z, rapid)
     %           t_array   -- Vector of evolution times
-    %           vp        -- Piston velocity
+    %           K0        -- Fermi momentum/rapidity of background state
+    %           xp_func   -- Piston position as anonynous function of time
+    %           vp_func   -- Piston velocity as anonynous function of time
     %           veff_func -- Anonymous function to calculate effective
     %                           velocity for contour
-    %           M_init    -- Number of points in DSW edge (R3) 
     % Output:   contour_t -- Cellarray with contour for each evolution time
     % =====================================================================
 
-
-    if vp < 2*K0
-        contour = [flip(linspace(0, eps, M_DSW))', flip(linspace(K0, K0+vp, M_DSW))'];
-    else
-        contour = [flip(linspace(0, eps, M_DSW))', flip(linspace(vp-K0, vp+K0, M_DSW))'];
+    if isempty(contour)
+        contour = [xp_func(0), K0];
     end
 
     N_steps     = length(t_array) - 1;
     contour_t   = cell(1, length(t_array));
     contour_t{1}= contour;
 
-    zmin        = -eps;
-    zmax        = 2*(vp+K0)*t_array(end);
+    % Calculate speed of sound for background
+    vsound = veff_func([0 K0; 10 K0; 10 -K0; 0 -K0]);
+    vsound = vsound(1);
+
     
     % initialize progress bar
     cpb = ConsoleProgressBar();                 % create instance
@@ -47,20 +52,20 @@ function contour_t = propagate_contour_constpiston_linear(K0, t_array, vp, veff_
     function contour = step_piston(contour, dt, t)
         % Gamma_pist are the points spawned at piston
 
-        if vp < 2*K0
+        if vp_func(t) < 2*vsound
             cont_temp   = [ contour;     
-                            zmax, K0; 
-                            zmax, -K0;
-                            zmin, -K0;
-                            zmin, K0 + vp;
+                            1e10, K0; 
+                            1e10, -K0;
+                            -1e10, -K0;
+                            -1e10, K0 + vp_func(t);
                             ];
         else
             cont_temp   = [ contour;
-                            vp*t, K0;
-                            zmax, K0; 
-                            zmax, -K0;
-                            zmin, -K0;
-                            zmin, K0 + vp;
+                            xp_func(t), K0;
+                            1e10, K0; 
+                            1e10, -K0;
+                            -1e10, -K0;
+                            -1e10, K0 + vp_func(t);
                             ];
         end
 
@@ -69,12 +74,12 @@ function contour_t = propagate_contour_constpiston_linear(K0, t_array, vp, veff_
         contour     = contour + dt*veff(1:size(contour, 1), :);
 
         % Generate new points on piston edge
-        if vp < 2*K0
-            p_new       = [vp*(t+dt), K0 + vp];
+        if vp_func(t) < 2*vsound
+            p_new       = [xp_func(t+dt), K0 + vp_func(t+dt)];
             contour     = [p_new; contour ];
         else
-            p1_new      = [vp*(t+dt), K0 + vp];
-            p2_new      = [vp*(t+dt), -K0 + vp];
+            p1_new      = [xp_func(t+dt), K0 + vp_func(t+dt)];
+            p2_new      = [xp_func(t+dt), -K0 + vp_func(t+dt)];
             contour     = [p1_new; contour; p2_new ];
         end
                  
