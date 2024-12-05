@@ -59,10 +59,10 @@ methods (Access = public)
     end
     
 
-    function [I, J, Ip_minus, Ih_minus, Ip_plus, Ih_plus] = calcCollisionIntegral(obj, theta, nu, t)
+    function [I, J, Ip_minus, Ih_minus, Ip_plus, Ih_plus] = calcCollisionIntegral(obj, fill, nu, t)
         % =================================================================
         % Purpose : Calculate collision integral in LL model
-        % Input :   theta-- filling function
+        % Input :   fill-- filling function
         %           nu   -- excistation probability (scalar)
         %           t    -- time
         % Output:   I    -- advection collision integral
@@ -70,11 +70,11 @@ methods (Access = public)
         %           I... -- collision integral for individual channels
         % =================================================================
 
-        [rhoP, rhoS] = obj.model.transform2rho(theta, t);
+        [rhoP, rhoS] = obj.model.transform2rho(fill, t);
         
         % calculate rho_p and rho_h on collision grids        
-        theta_p  = obj.interp2map( theta, obj.gridmap_p);
-        theta_m  = obj.interp2map( theta, obj.gridmap_m);  
+        fill_p  = obj.interp2map( fill, obj.gridmap_p);
+        fill_m  = obj.interp2map( fill, obj.gridmap_m);  
         rhoS_p   = obj.interp2map( rhoS, obj.gridmap_p);
         rhoS_m   = obj.interp2map( rhoS, obj.gridmap_m); 
         
@@ -82,10 +82,10 @@ methods (Access = public)
         PM = obj.Pm.*rhoS.t().*rhoS_m.*rhoS_m.t();
         PP = obj.Pp.*rhoS.t().*rhoS_p.*rhoS_p.t();
         
-        Ip_minus = trapz( obj.rapid_grid, double(PM.*(theta.*theta.t().*(1-theta_m).*(1-theta_m.t()))), 4);
-        Ih_minus = trapz( obj.rapid_grid, double(PM.*((1-theta).*(1-theta.t()).*theta_m.*theta_m.t())), 4);
-        Ip_plus  = trapz( obj.rapid_grid, double(PP.*(theta.*theta.t().*(1-theta_p).*(1-theta_p.t()))), 4);
-        Ih_plus  = trapz( obj.rapid_grid, double(PP.*((1-theta).*(1-theta.t()).*theta_p.*theta_p.t())), 4);
+        Ip_minus = trapz( obj.rapid_grid, double(PM.*(fill.*fill.t().*(1-fill_m).*(1-fill_m.t()))), 4);
+        Ih_minus = trapz( obj.rapid_grid, double(PM.*((1-fill).*(1-fill.t()).*fill_m.*fill_m.t())), 4);
+        Ip_plus  = trapz( obj.rapid_grid, double(PP.*(fill.*fill.t().*(1-fill_p).*(1-fill_p.t()))), 4);
+        Ih_plus  = trapz( obj.rapid_grid, double(PP.*((1-fill).*(1-fill.t()).*fill_p.*fill_p.t())), 4);
         
         % Normalize minus grids to plus grids
         Nh_plus  = trapz(obj.x_grid, trapz(obj.rapid_grid, double(Ih_plus.*rhoS), 1), 2);
@@ -114,41 +114,41 @@ methods (Access = public)
 
     % Implementation of abstract functions
     
-    function [theta, u, w] = initialize(obj, theta_init, u_init, w_init, t_array)
+    function [fill, u, w] = initialize(obj, fill_init, u_init, w_init, t_array)
         % =================================================================
         % Purpose : Calculates and stores all quantities needed for the
         %           step() method.
         %           In this case of first order step, nothing is required.
-        % Input :   theta_init -- Initial filling function.
+        % Input :   fill_init -- Initial filling function.
         %           u_init     -- Initial auxiliary variable 1.
         %           w_init     -- Initial auxiliary variable 2.
         %           t_array    -- Array of time steps.
-        % Output:   theta      -- Input theta for first step().
+        % Output:   fill      -- Input fill for first step().
         %           u          -- Input u for first step().
         %           w          -- Input w for first step().
         % =================================================================
        
-        if iscell(theta_init) && length(theta_init) > 1
-            % Assume theta_init{end} = theta(t = 0),
-            % while theta_init{end-1} = theta(t = -dt), ...
+        if iscell(fill_init) && length(fill_init) > 1
+            % Assume fill_init{end} = fill(t = 0),
+            % while fill_init{end-1} = fill(t = -dt), ...
             dt          = t_array(2) - t_array(1);
             
-            [S, A]      = obj.calcSourceTerm(theta_init{end-1}, obj.nu_init, w_init, -dt);
+            [S, A]      = obj.calcSourceTerm(fill_init{end-1}, obj.nu_init, w_init, -dt);
             
             obj.S_prev  = S;
             obj.A_prev  = A;
             
-            theta       = theta_init{end};
+            fill       = fill_init{end};
             u           = obj.nu_init; 
             w           = w_init; 
         else
             
-            [S, A]      = obj.calcSourceTerm(theta_init, obj.nu_init, w_init, 0);
+            [S, A]      = obj.calcSourceTerm(fill_init, obj.nu_init, w_init, 0);
             
             obj.S_prev  = S;
             obj.A_prev  = A;
             
-            theta       = theta_init;
+            fill       = fill_init;
             u           = obj.nu_init; 
             w           = w_init;
         end
@@ -156,9 +156,9 @@ methods (Access = public)
     end
     
     
-    function [S, A] = calcSourceTerm(obj, theta, u, w, t)
+    function [S, A] = calcSourceTerm(obj, fill, u, w, t)
         % u is excitation probability nu
-        [S, A] = obj.calcCollisionIntegral(theta, u, t);
+        [S, A] = obj.calcCollisionIntegral(fill, u, t);
     end
       
     

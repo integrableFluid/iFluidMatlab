@@ -39,16 +39,16 @@ methods (Access = protected)
 
     % Implementation of abstract functions
     
-    function [theta, u, w] = initialize(obj, theta_init, u_init, w_init, t_array)
+    function [fill, u, w] = initialize(obj, fill_init, u_init, w_init, t_array)
         % =================================================================
         % Purpose : Calculates and stores all quantities needed for the
         %           step() method.
         %           In this case of first order step, nothing is required.
-        % Input :   theta_init -- Initial filling function.
+        % Input :   fill_init -- Initial filling function.
         %           u_init     -- Initial position characteristic.
         %           w_init     -- Initial rapidity characteristic.
         %           t_array    -- Array of time steps.
-        % Output:   theta      -- Input theta for first step().
+        % Output:   fill      -- Input fill for first step().
         %           u          -- Input u for first step().
         %           w          -- Input w for first step().
         % =================================================================
@@ -56,28 +56,28 @@ methods (Access = protected)
         w       = w_init;
         
 
-        if iscell(theta_init) && length(theta_init) > 1
-            % Assume theta_init{end} = theta(t = 0),
-            % while theta_init{end-1} = theta(t = -dt), ...
+        if iscell(fill_init) && length(fill_init) > 1
+            % Assume fill_init{end} = fill(t = 0),
+            % while fill_init{end-1} = fill(t = -dt), ...
             dt = t_array(2) - t_array(1);
-            [obj.v_m, obj.a_m]      = obj.model.calcEffectiveVelocities(theta_init{end-1}, -dt);
+            [obj.v_m, obj.a_m]      = obj.model.calcEffectiveVelocities(fill_init{end-1}, -dt);
             
-            theta   = theta_init{end};
+            fill   = fill_init{end};
         else
-            [obj.v_m, obj.a_m]      = obj.model.calcEffectiveVelocities(theta_init, 0);
+            [obj.v_m, obj.a_m]      = obj.model.calcEffectiveVelocities(fill_init, 0);
             
-            theta   = theta_init;
+            fill   = fill_init;
         end
     end
       
 
-    function [x_d, r_d, v_n, a_n] = calculateDeparturePoints(obj, theta, t, dt)
+    function [x_d, r_d, v_n, a_n] = calculateDeparturePoints(obj, fill, t, dt)
         % Note, for interpolation of velocities, always extrapolate (true)
         % but ignore boundary conditions (false).
 
         if ~obj.settings.extrap_velocity
             % use analytic derivative to estimate velocities at next step
-            V      = obj.calcVelocityDerivatives(obj.settings.deriv_order, theta, t);
+            V      = obj.calcVelocityDerivatives(obj.settings.deriv_order, fill, t);
 
             v_n    = V{1,1};
             a_n    = V{2,1};
@@ -90,7 +90,7 @@ methods (Access = protected)
             end
         else
             % use extrapolation to estimate velocities at next step
-            [v_n, a_n]  = obj.model.calcEffectiveVelocities(theta, t);
+            [v_n, a_n]  = obj.model.calcEffectiveVelocities(fill, t);
             v_p         = 2*v_n - obj.v_m;
             a_p         = 2*a_n - obj.a_m;
         end
@@ -121,7 +121,7 @@ methods (Access = protected)
     end
     
     
-    function storeVelocityFields(obj, theta, x_d, r_d, v, a)
+    function storeVelocityFields(obj, fill, x_d, r_d, v, a)
         
         % store previous velocities
         obj.v_m     = v;

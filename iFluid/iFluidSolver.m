@@ -1,6 +1,6 @@
 classdef iFluidSolver < handle
     % Superclass for solving the main GHD equation by propagating the
-    % filling function, theta. The solving algorithm is abstracted leaving
+    % filling function, fill. The solving algorithm is abstracted leaving
     % it to the user to provide one by extending this class.
     % 
     % 
@@ -13,8 +13,8 @@ classdef iFluidSolver < handle
     %
     % ** Step 2 ** Implement the abstract methods 
     %   
-    %   initialize(obj, theta_init, u_init, w_init, t_array )
-    %   step(obj, theta_prev, u_prev, w_prev, t, dt)
+    %   initialize(obj, fill_init, u_init, w_init, t_array )
+    %   step(obj, fill_prev, u_prev, w_prev, t, dt)
     %
     %
     % ** Step 3 ** Write constructor calling the super-constructor
@@ -53,8 +53,8 @@ methods (Abstract, Access = protected)
     
     % Abstract methods must be implemented in extending class!
     
-    [theta, u, w] = initialize(obj, theta_init, u_init, w_init, t_array )
-    [theta_next, u_next, w_next] = step(obj, theta_prev, u_prev, w_prev, t, dt)
+    [fill, u, w] = initialize(obj, fill_init, u_init, w_init, t_array )
+    [fill_next, u_next, w_next] = step(obj, fill_prev, u_prev, w_prev, t, dt)
 
 end % end protected abstract methods
 
@@ -93,14 +93,31 @@ methods (Access = public)
 
     end
 
-    
-    function [theta_t, u_t, w_t] = propagateTheta(obj, theta_init, t_array)
+
+    function [fill_t, u_t, w_t] = propagateFilling(obj, fill_init, t_array)
         % =================================================================
         % Purpose : Propagates the filling function according to the GHD
         %           Euler-scale equation.
-        % Input :   theta_init -- Initial filling function (iFluidTensor).
+        % Input :   fill_init  -- Initial filling function (iFluidTensor).
         %           t_array    -- Time steps for propagation
-        % Output:   theta_t    -- Cell array of filling function,
+        % Output:   fill_t     -- Cell array of filling function,
+        %                         with each entry corresponding to t_array.
+        %           u_t        -- Cell array of position characteristics
+        %                         with each entry corresponding to t_array.
+        %           w_t        -- Cell array of rapidity characteristics
+        %                         with each entry corresponding to t_array.
+        % =================================================================
+
+        [fill_t, u_t, w_t] = obj.propagateTheta(fill_init, t_array);
+    end
+    
+    function [fill_t, u_t, w_t] = propagateTheta(obj, fill_init, t_array)
+        % =================================================================
+        % Purpose : Propagates the filling function according to the GHD
+        %           Euler-scale equation.
+        % Input :   fill_init  -- Initial filling function (iFluidTensor).
+        %           t_array    -- Time steps for propagation
+        % Output:   fill_t     -- Cell array of filling function,
         %                         with each entry corresponding to t_array.
         %           u_t        -- Cell array of position characteristics
         %                         with each entry corresponding to t_array.
@@ -111,7 +128,7 @@ methods (Access = public)
         Nstored         = 1 + ceil( Nsteps/obj.storeNthStep );
         
         % Initializes cell arrays
-        theta_t         = cell(1, Nstored);      
+        fill_t         = cell(1, Nstored);      
         u_t             = cell(1, Nstored);
         w_t             = cell(1, Nstored);
                                 
@@ -120,8 +137,8 @@ methods (Access = public)
 
         % Initializes the propagation, calculating and internally storing
         % any additional quantities needed for the step-function.
-        [theta, u, w]   = obj.initialize(theta_init, u_init, w_init, t_array);
-        theta_t{1}      = theta;
+        [fill, u, w]   = obj.initialize(fill_init, u_init, w_init, t_array);
+        fill_t{1}      = fill;
         u_t{1}          = u;
         w_t{1}          = w;
         
@@ -131,14 +148,14 @@ methods (Access = public)
         fprintf('Time evolution progress:');
         cpb.start();   
 
-        % Propagate theta using stepfunction
+        % Propagate fill using stepfunction
         count = 2;
         for n = 1:Nsteps
             dt            = t_array(n+1) - t_array(n);
-            [theta, u, w] = obj.step(theta, u, w, t_array(n), dt);
+            [fill, u, w] = obj.step(fill, u, w, t_array(n), dt);
             
             if mod(n, obj.storeNthStep) == 0
-                theta_t{count}  = theta;
+                fill_t{count}  = fill;
                 u_t{count}      = u;
                 w_t{count}      = w;
                 
@@ -160,27 +177,27 @@ end % end public methods
 methods (Access = protected)
     
     
-    function [theta_next, u_next, w_next] = performFirstOrderStep(obj, theta_prev, u_prev, w_prev, t, dt)            
+    function [fill_next, u_next, w_next] = performFirstOrderStep(obj, fill_prev, u_prev, w_prev, t, dt)            
         % =================================================================
         % Purpose : Performs a single, first-order Euler step propagating
-        %           the filling function theta(t) --> theta(t+dt).
-        % Input :   theta_prev -- Filling function at time t.
+        %           the filling function fill(t) --> fill(t+dt).
+        % Input :   fill_prev -- Filling function at time t.
         %           u_prev     -- Position characteristic at time t.
         %           w_prev     -- Rapidity characteristic at time t.
         %           t          -- Starting time.
         %           dt         -- Length of time step.
-        % Output:   theta_next -- Filling function at time t+dt.
+        % Output:   fill_next -- Filling function at time t+dt.
         %           u_next     -- Position characteristic at time t+dt.
         %           w_next     -- Rapidity characteristic at time t+dt.
         % =================================================================
-        [v_eff, a_eff]  = obj.coreObj.calcEffectiveVelocities(theta_prev, t, obj.x_grid, obj.rapid_grid, obj.type_grid); % should be (1xNxM)
+        [v_eff, a_eff]  = obj.coreObj.calcEffectiveVelocities(fill_prev, t, obj.x_grid, obj.rapid_grid, obj.type_grid); % should be (1xNxM)
             
         x_back          = obj.x_grid - dt*v_eff;
         r_back          = obj.rapid_grid - dt*a_eff;
         
-        % Use interpolation to find theta_prev at x_back, r_back and
-        % assign values to theta.
-        theta_next      = obj.interpPhaseSpace(theta_prev, r_back, x_back, obj.extrapFlag);
+        % Use interpolation to find fill_prev at x_back, r_back and
+        % assign values to fill.
+        fill_next      = obj.interpPhaseSpace(fill_prev, r_back, x_back, obj.extrapFlag);
         
         if obj.calcCharac
             u_next  = obj.interpPhaseSpace(u_prev, r_back, x_back, true); % always extrapolate u

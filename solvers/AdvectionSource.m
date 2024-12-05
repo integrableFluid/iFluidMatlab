@@ -28,8 +28,8 @@ methods (Abstract, Access = public)
     
     % Abstract methods must be implemented in extending class!
     
-    [theta, u, w]   = initialize(obj, theta_init, u_init, w_init, t_array)
-    [S, A]          = calcSourceTerm(obj, theta, u, w, t);
+    [fill, u, w]   = initialize(obj, fill_init, u_init, w_init, t_array)
+    [S, A]          = calcSourceTerm(obj, fill, u, w, t);
     [u_next, w_next]= auxStep(obj, u, w, A, t, dt); 
 
 end % end protected abstract methods
@@ -96,18 +96,18 @@ methods (Access = public)
     end
     
     
-    function [theta_next, u_next, w_next] = step(obj, theta, x_d, r_d, u, w, t, dt)
+    function [fill_next, u_next, w_next] = step(obj, fill, x_d, r_d, u, w, t, dt)
         % =================================================================
-        % Purpose : Propagates filling function theta one timestep dt 
+        % Purpose : Propagates filling function fill one timestep dt 
         %           according to the advection source term.
-        % Input :   theta   -- Filling function at time t.
+        % Input :   fill   -- Filling function at time t.
         %           x_d     -- Departure points for time-step dt.
         %           r_d     -- Departure points for time-step dt.
         %           u       -- Auxiliary variable.
         %           w       -- Auxiliary variable.
         %           t       -- Time
         %           dt      -- Time-step
-        % Output:   theta_next -- Propagated filling.
+        % Output:   fill_next -- Propagated filling.
         %           u_next     -- Propagated u.
         %           w_next     -- Propagated w.
         % =================================================================
@@ -118,26 +118,26 @@ methods (Access = public)
         case 'Crank-Nicolson'
             
             % interpolate filling function to departure points
-            theta_s     = obj.interpPhaseSpace(theta, r_d, x_d, obj.settings.extrapolate);
+            fill_s     = obj.interpPhaseSpace(fill, r_d, x_d, obj.settings.extrapolate);
             
             % calculate source term at start-point
-            [S, A_s]    = obj.calcSourceTerm(theta, u, w, t);
+            [S, A_s]    = obj.calcSourceTerm(fill, u, w, t);
             S_s         = obj.interpPhaseSpace(S, r_d, x_d, obj.settings.extrapolate);
-%             [S_d, A_d]  = obj.calcSourceTerm(theta_d, u, w, t);
+%             [S_d, A_d]  = obj.calcSourceTerm(fill_d, u, w, t);
 
             % solve fixed-point problem (G -> 0) using Picard iteration
-            theta_e     = theta_s;  % initial point
+            fill_e     = fill_s;  % initial point
             u_a         = u;
             w_a         = w;
             err       	= 1;
             iter        = 1;
             while err > obj.settings.tol && iter <= obj.settings.max_iter
                 % calculate source term at end-point
-                [S_e, A_e] = obj.calcSourceTerm(theta_e, u_a, w_a, t+dt);
+                [S_e, A_e] = obj.calcSourceTerm(fill_e, u_a, w_a, t+dt);
 
                 % setup fixed-point problem 
-                G           = theta_s - theta_e + dt/2*( S_s + S_e );
-                theta_e     = theta_e + G;
+                G           = fill_s - fill_e + dt/2*( S_s + S_e );
+                fill_e     = fill_e + G;
                 
                 % update auxiliary functions using the mid-point of the
                 % auxiliary source term A
@@ -149,17 +149,17 @@ methods (Access = public)
             end
 
             % return filling and auxiliary functions at arrival point
-            theta_next  = theta_e;
+            fill_next  = fill_e;
             u_next      = u_a;
             w_next      = w_a;  
 
         case 'SETTLS'
             
             % interpolate filling function to departure points
-            theta_s     = obj.interpPhaseSpace(theta, r_d, x_d, obj.settings.extrapolate);
+            fill_s     = obj.interpPhaseSpace(fill, r_d, x_d, obj.settings.extrapolate);
             
             % calculate source term on grid at time t
-            [S, A]      = obj.calcSourceTerm(theta, u, w, t);
+            [S, A]      = obj.calcSourceTerm(fill, u, w, t);
             
             % approximate source term at time t+dt and interpolate to
             % departure points
@@ -169,7 +169,7 @@ methods (Access = public)
             A_mid       = 1.5*A - 0.5*obj.A_prev;
 
             % update filling and auxiliary functions
-            theta_next      = theta_s + dt/2*( S + S_end_d );
+            fill_next      = fill_s + dt/2*( S + S_end_d );
             [u_next, w_next]= obj.auxStep(u, w, A_mid, t, dt);        
 
             % store results for next iteration
@@ -179,10 +179,10 @@ methods (Access = public)
         case 'midpoint'
             
             % interpolate filling function to departure points
-            theta_s     = obj.interpPhaseSpace(theta, r_d, x_d, obj.settings.extrapolate);
+            fill_s     = obj.interpPhaseSpace(fill, r_d, x_d, obj.settings.extrapolate);
             
              % calculate source term on grid at time t
-            [S, A]      = obj.calcSourceTerm(theta, u, w, t);
+            [S, A]      = obj.calcSourceTerm(fill, u, w, t);
             
             % approximate source terms A and A at time t+dt/2
             S_mid           = 1.5*S - 0.5*obj.S_prev;
@@ -190,7 +190,7 @@ methods (Access = public)
             S_mid_d         = obj.interpPhaseSpace(S_mid, r_d, x_d, obj.settings.extrapolate);
 
             % update filling and auxiliary functions
-            theta_next      = theta_s + dt/2*( S_mid + S_mid_d );
+            fill_next      = fill_s + dt/2*( S_mid + S_mid_d );
             [u_next, w_next]= obj.auxStep(u, w, A_mid, t, dt);        
 
             % store results for next iteration
@@ -200,13 +200,13 @@ methods (Access = public)
         case 'endpoint'
             
             % interpolate filling function to departure points
-            theta_s     = obj.interpPhaseSpace(theta, r_d, x_d, obj.settings.extrapolate);
+            fill_s     = obj.interpPhaseSpace(fill, r_d, x_d, obj.settings.extrapolate);
             
             % calculate source term on grid at time t
-            [S, A]      = obj.calcSourceTerm(theta_s, u, w, t);
+            [S, A]      = obj.calcSourceTerm(fill_s, u, w, t);
         
             % update filling and auxiliary functions
-            theta_next      = theta_s + dt*S;
+            fill_next      = fill_s + dt*S;
             [u_next, w_next]= obj.auxStep(u, w, A, t, dt); 
 
         otherwise

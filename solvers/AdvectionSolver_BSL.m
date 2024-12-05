@@ -1,6 +1,6 @@
 classdef AdvectionSolver_BSL < handle
     % Superclass for solving the main GHD equation by propagating the
-    % filling function, theta. The solving algorithm is abstracted leaving
+    % filling function, fill. The solving algorithm is abstracted leaving
     % it to the user to provide one by extending this class.
     % 
     % 
@@ -13,9 +13,9 @@ classdef AdvectionSolver_BSL < handle
     %
     % ** Step 2 ** Implement the abstract methods 
     %   
-    %   initialize(obj, theta_init, u_init, w_init, t_array )
-    %   calculateDeparturePoints(obj, theta, t, dt)
-    %   update(obj, theta, x_d, r_d, v, a)
+    %   initialize(obj, fill_init, u_init, w_init, t_array )
+    %   calculateDeparturePoints(obj, fill, t, dt)
+    %   update(obj, fill, x_d, r_d, v, a)
     %
     %
     % ** Step 3 ** Write constructor calling the super-constructor
@@ -50,9 +50,9 @@ methods (Abstract, Access = protected)
     
     % Abstract methods must be implemented in extending class!
     
-    [theta, u, w]   = initialize(obj, theta_init, u_init, w_init, t_array)
-    [x_d, r_d, v, a]= calculateDeparturePoints(obj, theta, t, dt)
-    storeVelocityFields(obj, theta, x_d, r_d, v, a) % used for AM solvers
+    [fill, u, w]   = initialize(obj, fill_init, u_init, w_init, t_array)
+    [x_d, r_d, v, a]= calculateDeparturePoints(obj, fill, t, dt)
+    storeVelocityFields(obj, fill, x_d, r_d, v, a) % used for AM solvers
 
 end % end protected abstract methods
 
@@ -118,29 +118,29 @@ methods (Access = public)
     end
 
     
-    function [theta_next, u_next, w_next] = step(obj, theta, u, w, t, dt)
+    function [fill_next, u_next, w_next] = step(obj, fill, u, w, t, dt)
         % =================================================================
-        % Purpose : Propagates filling function theta one timestep dt.
-        % Input :   theta   -- Filling function at time t.
+        % Purpose : Propagates filling function fill one timestep dt.
+        % Input :   fill   -- Filling function at time t.
         %           u       -- Lin. advection: Position characteristic
         %                      Non-lin. advection: Auxiliary variable
         %           w       -- Lin. advection: Rapidity characteristic
         %                      Non-lin. advection: Auxiliary variable
         %           t       -- Time
         %           dt      -- Time-step
-        % Output:   theta_next -- Propagated filling.
+        % Output:   fill_next -- Propagated filling.
         %           u_next     -- Propagated u.
         %           w_next     -- Propagated w.
         % =================================================================
         
         
-        [x_d, r_d, v, a] = obj.calculateDeparturePoints(theta, t, dt);
+        [x_d, r_d, v, a] = obj.calculateDeparturePoints(fill, t, dt);
         
         if isempty(obj.source)
             % no source term --> pure advection
 
-            theta_next = obj.interpPhaseSpace(theta, r_d, x_d);
-            obj.storeVelocityFields(theta_next, x_d, r_d, v, a);
+            fill_next = obj.interpPhaseSpace(fill, r_d, x_d);
+            obj.storeVelocityFields(fill_next, x_d, r_d, v, a);
 
             if obj.settings.prop_characteristics
                 % return characteristics X(t+dt, 0)
@@ -155,20 +155,35 @@ methods (Access = public)
         else
             % source term --> non-linear advection step
             % u_next and w_next are auxiliary variables
-            [theta_next, u_next, w_next] = obj.source.step(theta, x_d, r_d, u, w, t, dt);
-            obj.storeVelocityFields(theta_next, x_d, r_d, v, a);
+            [fill_next, u_next, w_next] = obj.source.step(fill, x_d, r_d, u, w, t, dt);
+            obj.storeVelocityFields(fill_next, x_d, r_d, v, a);
         end
             
     end
     
-    
-    function [theta_t, u_t, w_t] = propagateTheta(obj, theta_init, t_array)
+    function [fill_t, u_t, w_t] = propagateFilling(obj, fill_init, t_array)
         % =================================================================
         % Purpose : Propagates the filling function according to the GHD
         %           Euler-scale equation.
-        % Input :   theta_init -- Initial filling function (iFluidTensor).
+        % Input :   fill_init -- Initial filling function (iFluidTensor).
         %           t_array    -- Time steps for propagation
-        % Output:   theta_t    -- Cell array of filling function,
+        % Output:   fill_t    -- Cell array of filling function,
+        %                         with each entry corresponding to t_array.
+        %           u_t        -- Cell array of position characteristics
+        %                         with each entry corresponding to t_array.
+        %           w_t        -- Cell array of rapidity characteristics
+        %                         with each entry corresponding to t_array.
+        % =================================================================
+        [fill_t, u_t, w_t] = obj.propagateTheta(fill_init, t_array);
+    end
+    
+    function [fill_t, u_t, w_t] = propagateTheta(obj, fill_init, t_array)
+        % =================================================================
+        % Purpose : Propagates the filling function according to the GHD
+        %           Euler-scale equation.
+        % Input :   fill_init -- Initial filling function (iFluidTensor).
+        %           t_array    -- Time steps for propagation
+        % Output:   fill_t    -- Cell array of filling function,
         %                         with each entry corresponding to t_array.
         %           u_t        -- Cell array of position characteristics
         %                         with each entry corresponding to t_array.
@@ -179,7 +194,7 @@ methods (Access = public)
         Nstored         = 1 + ceil( Nsteps/obj.settings.storeNthStep );
         
         % Initializes cell arrays
-        theta_t         = cell(1, Nstored);      
+        fill_t         = cell(1, Nstored);      
         u_t             = cell(1, Nstored);
         w_t             = cell(1, Nstored);
         
@@ -188,13 +203,13 @@ methods (Access = public)
             
         % Initializes the propagation, calculating and internally storing
         % any additional quantities needed for the step-function.
-        [theta, u, w]   = obj.initialize(theta_init, u_init, w_init, t_array);
+        [fill, u, w]   = obj.initialize(fill_init, u_init, w_init, t_array);
         
         if ~isempty(obj.source)
-            [theta, u, w] = obj.source.initialize(theta_init, u_init, w_init, t_array);
+            [fill, u, w] = obj.source.initialize(fill_init, u_init, w_init, t_array);
         end
         
-        theta_t{1}      = theta;
+        fill_t{1}      = fill;
         u_t{1}          = u;
         w_t{1}          = w;
         
@@ -205,14 +220,14 @@ methods (Access = public)
         fprintf('Time evolution progress:');
         cpb.start();   
 
-        % Propagate theta using stepfunction
+        % Propagate fill using stepfunction
         count = 2;
         for n = 1:Nsteps
             dt            = t_array(n+1) - t_array(n);
-            [theta, u, w] = obj.step(theta, u, w, t_array(n), dt);
+            [fill, u, w] = obj.step(fill, u, w, t_array(n), dt);
             
             if mod(n, obj.settings.storeNthStep) == 0
-                theta_t{count}  = theta;
+                fill_t{count}  = fill;
                 u_t{count}      = u;
                 w_t{count}      = w;
                 
@@ -329,12 +344,12 @@ methods (Access = public)
     end
         
     
-    function V = calcVelocityDerivatives(obj, order, theta, t)
+    function V = calcVelocityDerivatives(obj, order, fill, t)
         % =================================================================
         % Purpose : Calculates effective velocity and acceleration plus
         %           their temporal derivatives up to given order.
         % Input :   order   -- Max order of derivatives calculated.
-        %           theta   -- Filling function (fluidcell)
+        %           fill   -- Filling function (fluidcell)
         %           t       -- Time
         % Output:   v       -- cell with velocities and derivatives.
         % =================================================================
@@ -344,8 +359,8 @@ methods (Access = public)
         V           = cell(2, order);
         
         % calculate velocities
-        Uinv        = obj.model.calcDressingOperator(theta, t);
-        [veff, aeff, de_dr, dp_dr] = obj.model.calcEffectiveVelocities(theta, t, Uinv);
+        Uinv        = obj.model.calcDressingOperator(fill, t);
+        [veff, aeff, de_dr, dp_dr] = obj.model.calcEffectiveVelocities(fill, t, Uinv);
         
         V{1,1}      = veff;
         V{2,1}      = aeff;
@@ -357,11 +372,11 @@ methods (Access = public)
             weff        = de_dr;
             beff        = elem.*aeff;
 
-            theta_dt    = - veff.*gradient(theta,2,obj.x_grid) - aeff.*gradient(theta,1,obj.rapid_grid);
+            fill_dt    = - veff.*gradient(fill,2,obj.x_grid) - aeff.*gradient(fill,1,obj.rapid_grid);
             cell_dt     = - gradient(weff,2,obj.x_grid) - gradient(beff,1,obj.rapid_grid); 
 
-            S_w         = -kernel*(obj.rapid_w.*theta_dt.*weff);
-            S_b         = -kernel*(obj.rapid_w.*theta_dt.*beff);
+            S_w         = -kernel*(obj.rapid_w.*fill_dt.*weff);
+            S_b         = -kernel*(obj.rapid_w.*fill_dt.*beff);
 
             weff_dt     = obj.model.dress(S_w, Uinv);
             beff_dt     = obj.model.dress(S_b, Uinv);
@@ -374,13 +389,13 @@ methods (Access = public)
         end
            
         if order > 1 % calculate second order derivatives
-            theta_dt2   = - veff_dt.*gradient(theta,2,obj.x_grid) - veff.*gradient(theta_dt,2,obj.x_grid) ...
-                          - aeff_dt.*gradient(theta,1,obj.rapid_grid) - aeff.*gradient(theta_dt,1,obj.rapid_grid);
+            fill_dt2   = - veff_dt.*gradient(fill,2,obj.x_grid) - veff.*gradient(fill_dt,2,obj.x_grid) ...
+                          - aeff_dt.*gradient(fill,1,obj.rapid_grid) - aeff.*gradient(fill_dt,1,obj.rapid_grid);
 
             cell_dt2    = - gradient(weff_dt,2,obj.x_grid) - gradient(beff_dt,1,obj.rapid_grid); 
 
-            S_w2        = - kernel*(obj.rapid_w.*theta_dt2.*weff) - 2*kernel*(obj.rapid_w.*theta_dt.*weff_dt);
-            S_b2        = - kernel*(obj.rapid_w.*theta_dt2.*beff) - 2*kernel*(obj.rapid_w.*theta_dt.*beff_dt);
+            S_w2        = - kernel*(obj.rapid_w.*fill_dt2.*weff) - 2*kernel*(obj.rapid_w.*fill_dt.*weff_dt);
+            S_b2        = - kernel*(obj.rapid_w.*fill_dt2.*beff) - 2*kernel*(obj.rapid_w.*fill_dt.*beff_dt);
 
             weff_dt2    = obj.model.dress(S_w2, Uinv);
             beff_dt2    = obj.model.dress(S_b2, Uinv);

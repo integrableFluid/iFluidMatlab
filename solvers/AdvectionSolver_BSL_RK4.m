@@ -31,26 +31,26 @@ methods (Access = protected)
 
     % Implementation of abstract functions
     
-    function [theta, u, w] = initialize(obj, theta_init, u_init, w_init, t_array)
+    function [fill, u, w] = initialize(obj, fill_init, u_init, w_init, t_array)
         % =================================================================
         % Purpose : Calculates and stores all quantities needed for the
         %           step() method.
         %           In this case of first order step, nothing is required.
-        % Input :   theta_init -- Initial filling function.
+        % Input :   fill_init -- Initial filling function.
         %           u_init     -- Initial position characteristic.
         %           w_init     -- Initial rapidity characteristic.
         %           t_array    -- Array of time steps.
-        % Output:   theta      -- Input theta for first step().
+        % Output:   fill      -- Input fill for first step().
         %           u          -- Input u for first step().
         %           w          -- Input w for first step().
         % =================================================================
-        theta   = theta_init;
+        fill   = fill_init;
         u       = u_init;
         w       = w_init;
     end
       
 
-    function [x_d, r_d, v_n, a_n] = calculateDeparturePoints(obj, theta, t, dt)
+    function [x_d, r_d, v_n, a_n] = calculateDeparturePoints(obj, fill, t, dt)
         % Note, for interpolation of velocities, always extrapolate (true)
         % but ignore boundary conditions (false).
 
@@ -61,7 +61,7 @@ methods (Access = protected)
         
         % calculate derivatives of velocities and use to estimate
         % velocities at temporal midpoint
-        V           = obj.calcVelocityDerivatives(obj.settings.deriv_order, theta, t);
+        V           = obj.calcVelocityDerivatives(obj.settings.deriv_order, fill, t);
 
         veff_mid    = V{1,1};
         aeff_mid    = V{2,1};
@@ -139,7 +139,7 @@ methods (Access = protected)
     end
     
     
-    function storeVelocityFields(obj, theta, x_d, r_d, v, a)
+    function storeVelocityFields(obj, fill, x_d, r_d, v, a)
         % RK solvers do not rely on velocity fields of previous steps
     end
     
