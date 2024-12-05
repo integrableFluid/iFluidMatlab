@@ -20,9 +20,6 @@ properties (Access = public)
     t_si        = 1; % time scale
     T_si        = 1; % temperature scale
     P_si        = 1; % momentum scale
-    
-    
-    RS = 1;
 
 end % end private properties
 
@@ -30,7 +27,7 @@ end % end private properties
 methods (Access = public)
     
     %% Constructor
-    function obj = LiebLinigerModel_SI(omega_scale, x_grid, rapid_grid, rapid_w, couplings, Options)
+    function obj = LiebLinigerModel_SI(freq_scale, x_grid, rapid_grid, rapid_w, couplings, Options)
         if nargin < 6
             % If no options, pass empty struct to LiebLiniger constructor
             Options = struct;
@@ -39,8 +36,8 @@ methods (Access = public)
         obj = obj@LiebLinigerModel(x_grid, rapid_grid, rapid_w, couplings, Options);
         
         % Calculate unit scales
-        obj.Eg_si   = 0.5*obj.hbar_si*omega_scale; 
-        obj.Lg_si   = (sqrt(obj.m_si*omega_scale/obj.hbar_si))^(-1);
+        obj.Eg_si   = 0.5*obj.hbar_si*freq_scale; 
+        obj.Lg_si   = (sqrt(obj.m_si*freq_scale/obj.hbar_si))^(-1);
         
 %         g1D = 2*obj.hbar_si*omega_scale*obj.as_si;
 %         obj.Eg_si   = 0.5*obj.m_si*g1D^2 / obj.hbar_si^2; 
@@ -182,28 +179,28 @@ methods (Access = public)
     end
     
     
-    function [mu0_fit, theta_fit] = fitDensity(obj, T, density_target, mu0_guess)        
+    function [mu0_fit, fill_fit] = fitDensity(obj, T, density_target, mu0_guess)        
         % Convert SI --> TBA
         T       = obj.convert2TBA(T, 'temperature');
         mu0_guess = obj.convert2TBA(mu0_guess, 'energy');
         density_target = obj.convert2SI(density_target, 'length');
         
         % Run LLS function
-        [mu0_fit, theta_fit] = fitDensity@LiebLinigerModel(obj, T, density_target, mu0_guess); 
+        [mu0_fit, fill_fit] = fitDensity@LiebLinigerModel(obj, T, density_target, mu0_guess); 
         
         % Convert TBA --> SI
         mu0_fit = obj.convert2SI(mu0_fit, 'energy');
     end
     
     
-    function [x, theta_fit] = fitThermalState(obj, theta_noneq, t, x0, options)    
+    function [x, fill_fit] = fitThermalState(obj, fill_noneq, t, x0, options)    
         % Convert SI --> TBA
         x0(1)   = obj.convert2TBA(x0(1), 'temperature');
         x0(2)   = obj.convert2TBA(x0(2), 'energy');
         t       = obj.convert2TBA(t, 'time');
 
         % Run LLS function
-        [x, theta_fit] = fitThermalState@LiebLinigerModel(obj, theta_noneq, t, x0, options);
+        [x, fill_fit] = fitThermalState@LiebLinigerModel(obj, fill_noneq, t, x0, options);
         
         % Convert TBA --> SI
         x(1)    = obj.convert2SI(x(1), 'temperature');
@@ -246,39 +243,21 @@ methods (Access = public)
     end
     
     
-    function [rho, rhoS] = transform2rho(obj, theta, t_array)
+    function [rho, rhoS] = transform2rho(obj, fill, t_array)
         if nargin == 3       
             % Convert SI --> TBA
             t_array = obj.convert2TBA(t_array, 'time');
 
             % Run LLS function
-            [rho, rhoS] = transform2rho@LiebLinigerModel(obj, theta, t_array);
-            
-            if iscell(rho)
-                rho = cellfun(@(x) x*obj.RS,rho,'un',0);
-                rhoS = cellfun(@(x) x*obj.RS,rhoS,'un',0);
-            else
-                rhoS = obj.RS*rhoS;
-                rho = obj.RS*rho;
-            end
-            
+            [rho, rhoS] = transform2rho@LiebLinigerModel(obj, fill, t_array);
         else
             % Run LLS function
-            [rho, rhoS] = transform2rho@LiebLinigerModel(obj, theta);
-            
-            if iscell(rho)
-                rho = cellfun(@(x) x*obj.RS,rho,'un',0);
-                rhoS = cellfun(@(x) x*obj.RS,rhoS,'un',0);
-            else
-                rhoS = obj.RS*rhoS;
-                rho = obj.RS*rho;
-            end
-            
+            [rho, rhoS] = transform2rho@LiebLinigerModel(obj, fill);            
         end
     end
     
     
-    function [theta, rhoS] = transform2theta(obj, rho, t_array)
+    function [fill, rhoS] = transform2theta(obj, rho, t_array)
         % Convert SI --> TBA (for inverse quantities, use SI rather than TBA)
         rho     = obj.convert2SI( rho, 'length'); % convert 'per length' 
         rho     = obj.convert2SI( rho, 'rapidity'); % convert 'per rapidity' 
@@ -288,29 +267,33 @@ methods (Access = public)
             t_array = obj.convert2TBA(t_array, 'time');
 
             % Run LLS function
-            [theta, rhoS] = transform2theta@LiebLinigerModel(obj, rho, t_array);
-            
-            if iscell(rhoS)
-                rhoS = cellfun(@(x) x*obj.RS,rhoS,'un',0);
-            else
-                rhoS = obj.RS*rhoS;
-            end
-            
+            [fill, rhoS] = transform2theta@LiebLinigerModel(obj, rho, t_array);           
         else
             % Run LLS function
-            [theta, rhoS] = transform2theta@LiebLinigerModel(obj, rho);
-            
-            if iscell(rhoS)
-                rhoS = cellfun(@(x) x*obj.RS,rhoS,'un',0);
-            else
-                rhoS = obj.RS*rhoS;
-            end
-            
+            [fill, rhoS] = transform2theta@LiebLinigerModel(obj, rho);            
+        end
+    end
+
+
+    function [fill, rhoS] = transform2fill(obj, rho, t_array)
+        % Convert SI --> TBA (for inverse quantities, use SI rather than TBA)
+        rho     = obj.convert2SI( rho, 'length'); % convert 'per length' 
+        rho     = obj.convert2SI( rho, 'rapidity'); % convert 'per rapidity' 
+        
+        if nargin == 3       
+            % Convert SI --> TBA
+            t_array = obj.convert2TBA(t_array, 'time');
+
+            % Run LLS function
+            [fill, rhoS] = transform2fill@LiebLinigerModel(obj, rho, t_array);           
+        else
+            % Run LLS function
+            [fill, rhoS] = transform2fill@LiebLinigerModel(obj, rho);            
         end
     end
     
     
-    function [q, j] = calcCharges(obj, c_idx, theta, t_array, convert_output)
+    function [q, j] = calcCharges(obj, c_idx, fill, t_array, convert_output)
         if nargin < 5
             convert_output = true;
         end
@@ -319,7 +302,7 @@ methods (Access = public)
         t_array = obj.convert2TBA(t_array, 'time');
         
         % Run LLS function
-        [q, j] = calcCharges@LiebLinigerModel(obj, c_idx, theta, t_array);
+        [q, j] = calcCharges@LiebLinigerModel(obj, c_idx, fill, t_array);
         
         if convert_output
         % Convert TBA --> SI
@@ -347,7 +330,7 @@ methods (Access = public)
     
 
 
-    function DW_SI = calcDrudeWeight(obj, c_idx, theta, t)
+    function D_SI = calcDrudeWeight(obj, c_idx, fill, t)
         
         if nargin < 4
             t = 0;
@@ -357,10 +340,10 @@ methods (Access = public)
         t = obj.convert2TBA(t, 'time');
         
         % Run LL function
-        DW_TBA = calcDrudeWeight@LiebLinigerModel(obj, c_idx, theta, t);
+        DW_TBA = calcDrudeWeight@LiebLinigerModel(obj, c_idx, fill, t);
         
         % Convert TBA --> SI
-        DW_SI = obj.convert2TBA(DW_TBA, 'length'); % convert 'per length'
+        D_SI = obj.convert2TBA(DW_TBA, 'length'); % convert 'per length'
 
         for i = 1:length(c_idx)
         for j = 1:length(c_idx)
@@ -370,9 +353,9 @@ methods (Access = public)
             case 0 % atomic density
                 % does nothing
             case 1 % momentum density
-                DW_SI(i,j,:) = obj.convert2SI(DW_SI(i,j,:), 'momentum');                
+                D_SI(i,j,:) = obj.convert2SI(D_SI(i,j,:), 'momentum');                
             case 2 % energy density
-                DW_SI(i,j,:) = obj.convert2SI(DW_SI(i,j,:), 'energy');                 
+                D_SI(i,j,:) = obj.convert2SI(D_SI(i,j,:), 'energy');                 
             otherwise
                 disp(['Warning: No known unit of charge nr. ' num2str(c_idx(i))])
             end
@@ -382,9 +365,9 @@ methods (Access = public)
             case 0 % atomic density
                 % does nothing
             case 1 % momentum density
-                DW_SI(i,j,:) = obj.convert2SI(DW_SI(i,j,:), 'momentum');                
+                D_SI(i,j,:) = obj.convert2SI(D_SI(i,j,:), 'momentum');                
             case 2 % energy density
-                DW_SI(i,j,:) = obj.convert2SI(DW_SI(i,j,:), 'energy');                 
+                D_SI(i,j,:) = obj.convert2SI(D_SI(i,j,:), 'energy');                 
             otherwise
                 disp(['Warning: No known unit of charge nr. ' num2str(c_idx(j))])
             end
@@ -395,26 +378,26 @@ methods (Access = public)
 
 
     
-    function [theta, e_eff] = calcThermalState(obj, T, TBA_couplings)
+    function [fill, e_eff] = calcThermalState(obj, T, TBA_couplings)
         % Convert SI --> TBA
         T = obj.convert2TBA(T, 'temperature');
         
         if nargin == 3
             % Convert SI --> TBA
             % TBA_couplings   = obj.convert2TBA(TBA_couplings, 'couplings');
-            [theta, e_eff]  = calcThermalState@LiebLinigerModel(obj, T, TBA_couplings);
+            [fill, e_eff]  = calcThermalState@LiebLinigerModel(obj, T, TBA_couplings);
         else
-            [theta, e_eff]  = calcThermalState@LiebLinigerModel(obj, T);
+            [fill, e_eff]  = calcThermalState@LiebLinigerModel(obj, T);
         end
     end
     
     
-    function g_n = calcLocalCorrelator(obj, n, theta, t_array)
+    function g_n = calcLocalCorrelator(obj, n, fill, t_array)
         % Convert SI --> TBA
         t_array = obj.convert2TBA(t_array, 'time');
         
         % Calculate correlations
-        g_n = calcLocalCorrelator@LiebLinigerModel(obj, n, theta, t_array);
+        g_n = calcLocalCorrelator@LiebLinigerModel(obj, n, fill, t_array);
         
         % Convert TBA --> SI
         g_n = g_n/obj.Lg_si^n;

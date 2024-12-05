@@ -172,16 +172,16 @@ methods (Access = public)
     end
     
     
-    function f = getStatFactor(obj, theta)
+    function f = getStatFactor(obj, fill)
         switch obj.quasiSpecies
         case 'fermion'
-            f = 1 - theta;
+            f = 1 - fill;
         case 'boson'
-            f = 1 + theta;
+            f = 1 + fill;
         case 'classical'
             f = 1;
         case 'radiative'
-            f = theta;
+            f = fill;
         otherwise
             error(['Quasi-particle species ' obj.quasiSpecies ' is not implemented! Check spelling and cases!'])
         end
@@ -231,29 +231,29 @@ methods (Access = public)
     end
     
        
-    function [rho, rhoS] = transform2rho(obj, theta, t_array)
+    function [rho, rhoS] = transform2rho(obj, fill, t_array)
         % =================================================================
-        % Purpose : Transforms filling function into root density.
-        % Input :   theta   -- filling function (cell array of ifluidcell)
+        % Purpose : Calculates root density from filling function.
+        % Input :   fill    -- filling function (cell array of ifluidcell)
         %           t_array -- array of times corresponding to theta
-        % Output:   rho     -- root density (cell array of ifluidcell)
+        % Output:   rho     -- quasiparticle density (cellarray of ifluidcell)
         %           rhoS    -- density of states (cell array of ifluidcell)
         % =================================================================   
         
-        if iscell(theta)
-            Nsteps = length(theta); % number of time steps
+        if iscell(fill)
+            Nsteps = length(fill); % number of time steps
         else
             Nsteps = 1;
         end
         
-        rho     = cell(1,Nsteps);
+        rho   = cell(1,Nsteps);
         rhoS    = cell(1,Nsteps);
         for n = 1:Nsteps % Transform for each time step
             
             if Nsteps == 1
-                theta_n = theta;
+                fill_n = fill;
             else
-                theta_n = theta{n};
+                fill_n = fill{n};
             end
             
             if nargin < 3
@@ -262,26 +262,26 @@ methods (Access = public)
                 t = t_array(n);
             end
 
-            dp      = obj.getMomentumRapidDeriv(t, obj.x_grid, obj.rapid_grid, obj.type_grid);
-            dp_dr   = obj.applyDressing(dp, theta_n, t);
+            dp          = obj.getMomentumRapidDeriv(t, obj.x_grid, obj.rapid_grid, obj.type_grid);
+            dp_dr       = obj.applyDressing(dp, fill_n, t);
             
-            rhoS{n} = 1/(2*pi) * dp_dr;
-            rho{n}  = theta_n.*rhoS{n}; 
+            rhoS{n}    = 1/(2*pi) * dp_dr;
+            rho{n}   = fill_n.*rhoS{n}; 
         end
         
         if Nsteps == 1
-            rho     = rho{1};
-            rhoS    = rhoS{1};
+            rho      = rho{1};
+            rhoS       = rhoS{1};
         end
     end
     
     
-    function [theta, rhoS] = transform2theta(obj, rho, t_array)
+    function [fill, rhoS] = transform2theta(obj, rho, t_array)
         % =================================================================
-        % Purpose : Transforms root density into filling function.
-        % Input :   rho     -- root density (cell array of ifluidcell)
+        % Purpose : Calculates filling function from root density.
+        % Input :   rho     -- quasiparticle density (cell array of ifluidcell)
         %           t_array -- array of times corresponding to theta
-        % Output:   theta   -- filling function (cell array of ifluidcell)
+        % Output:   fill    -- filling function (cell array of ifluidcell)
         %           rhoS    -- density of states (cell array of ifluidcell)
         % =================================================================
         
@@ -291,7 +291,7 @@ methods (Access = public)
             Nsteps = 1;
         end
         
-        theta   = cell(1,Nsteps);
+        fill   = cell(1,Nsteps);
         rhoS    = cell(1,Nsteps);
         for n = 1:Nsteps % Transform for each time step
             if Nsteps == 1
@@ -310,22 +310,36 @@ methods (Access = public)
             kernel  = 1/(2*pi) * obj.getScatteringRapidDeriv(t, obj.x_grid, obj.rapid_grid, obj.rapid_aux, obj.type_grid, obj.type_aux); 
             
             rhoS{n} = dp/(2*pi) - kernel*(obj.rapid_w.*rho_n);
-            theta{n}= rho_n./rhoS{n};
+            fill{n}= rho_n./rhoS{n};
         end
         
         if Nsteps == 1
-            theta   = theta{1};
+            fill   = fill{1};
             rhoS    = rhoS{1};
         end
     end
+
+
+    function [fill, rhoS] = transform2fill(obj, rho, t_array)
+        % =================================================================
+        % Purpose : Calculates filling function from root density.
+        % Input :   rho     -- quasiparticle density (cell array of ifluidcell)
+        %           t_array -- array of times corresponding to theta
+        % Output:   fill    -- filling function (cell array of ifluidcell)
+        %           rhoS    -- density of states (cell array of ifluidcell)
+        % =================================================================
+        
+        [fill, rhoS] = obj.transform2theta(rho, t_array);
+    end
+    
     
 
-    function [q, j, Vq, Vj] = calcCharges(obj, c_idx, theta, t_array, varargin)
+    function [q, j, Vq, Vj] = calcCharges(obj, c_idx, fill, t_array, varargin)
         % =================================================================
         % Purpose : Calculates expectation values of charge densities and
         %           associated currents.
         % Input :   c_idx   -- charge indices
-        %           theta   -- filling function (cell array of ifluidcell)
+        %           fill    -- filling function (cell array of ifluidcell)
         %           t_array -- array of times corresponding to theta
         %           varargin-- optional arguments:
         %                       calc_formfactors (default = false)
@@ -361,9 +375,9 @@ methods (Access = public)
     
         for i = 1:Nsteps
             if Nsteps == 1
-                theta_i = theta;
+                theta_i = fill;
             else
-                theta_i = theta{i};
+                theta_i = fill{i};
             end
             
             t       = t_array(i);
@@ -395,7 +409,7 @@ methods (Access = public)
     end
     
     
-    function [theta, e_eff] = calcThermalState(obj, T, TBA_couplings)
+    function [fill, e_eff] = calcThermalState(obj, T, TBA_couplings)
         % =================================================================
         % Purpose : Calculates thermal state for the given couplings and
         %           temperature.
@@ -403,7 +417,7 @@ methods (Access = public)
         %           TBA_couplings -- (optional) cell array of couplings. If
         %                            none are passed, use already set
         %                            couplings of model.
-        % Output:   theta -- Filling function of thermal state 
+        % Output:   fill  -- Filling function of thermal state 
         %           e_eff -- Pesudo-energy of thermal state 
         % ================================================================= 
         if nargin == 3 % use input TBA_couplings
@@ -422,7 +436,7 @@ methods (Access = public)
         w       = ebare./T;
         
         e_eff   = obj.calcEffectiveEnergy(w, 0, obj.x_grid);
-        theta   = obj.calcFillingFraction(e_eff);
+        fill    = obj.calcFillingFraction(e_eff);
         
         if nargin == 3
             % Return to old couplings
@@ -431,11 +445,11 @@ methods (Access = public)
     end
 
     
-    function [v_eff, a_eff, de_dr, dp_dr] = calcEffectiveVelocities(obj, theta, t, varargin)        
+    function [v_eff, a_eff, de_dr, dp_dr] = calcEffectiveVelocities(obj, fill, t, varargin)        
         % =================================================================
         % Purpose : Calculates effective velocity and acceleration of
         %           quasiparticles.
-        % Input :   theta -- filling function (ifluidcell)
+        % Input :   fill  -- filling function (ifluidcell)
         %           t     -- time (scalar)
         % Output:   v_eff -- Effective velocity (ifluidcell)
         %           a_eff -- Effective acceleration (ifluidcell)
@@ -446,7 +460,7 @@ methods (Access = public)
             rapid   = obj.rapid_grid;
             type    = obj.type_grid;
             
-            [v_eff, a_eff, de_dr, dp_dr] = obj.calcVelocitiesNormal(theta, t, x, rapid, type);  
+            [v_eff, a_eff, de_dr, dp_dr] = obj.calcVelocitiesNormal(fill, t, x, rapid, type);  
             
         elseif length(varargin) == 3
             % Grids given as extra arguments
@@ -454,23 +468,23 @@ methods (Access = public)
             rapid   = varargin{2};
             type    = varargin{3};
             
-            [v_eff, a_eff, de_dr, dp_dr] = obj.calcVelocitiesNormal(theta, t, x, rapid, type);  
+            [v_eff, a_eff, de_dr, dp_dr] = obj.calcVelocitiesNormal(fill, t, x, rapid, type);  
             
         elseif length(varargin) == 1
             % Dressing kernel given as extra argument. Calculate dressing
             % using this kernel instead of '\' operation.
             D       = varargin{1};
             
-            [v_eff, a_eff, de_dr, dp_dr] = obj.calcVelocitiesFast(theta, t, D);  
+            [v_eff, a_eff, de_dr, dp_dr] = obj.calcVelocitiesFast(fill, t, D);  
         end
     end
     
 
-    function [v_eff, a_eff, de_dr, dp_dr] = calcVelocitiesNormal(obj, theta, t, x, rapid, type)        
+    function [v_eff, a_eff, de_dr, dp_dr] = calcVelocitiesNormal(obj, fill, t, x, rapid, type)        
         % =================================================================
         % Purpose : Calculates effective velocity and acceleration of
         %           quasiparticles.
-        % Input :   theta -- filling function (fluidcell)
+        % Input :   fill  -- filling function (fluidcell)
         %           t     -- time (scalar)
         %           x     -- x-coordinate (can be scalar or vector)
         %           rapid -- rapid-coordinate (can be scalar or vector)
@@ -479,8 +493,8 @@ methods (Access = public)
         %           a_eff -- Effective acceleration (fluidcell)
         % =================================================================
         
-        de_dr   = obj.applyDressing(obj.getEnergyRapidDeriv(t, x, rapid, type), theta, t);
-        dp_dr   = obj.applyDressing(obj.getMomentumRapidDeriv(t, x, rapid, type), theta, t);
+        de_dr   = obj.applyDressing(obj.getEnergyRapidDeriv(t, x, rapid, type), fill, t);
+        dp_dr   = obj.applyDressing(obj.getMomentumRapidDeriv(t, x, rapid, type), fill, t);
         
         v_eff   = de_dr./dp_dr;
          
@@ -495,19 +509,19 @@ methods (Access = public)
         % Calculate contribution for each coupling
         for coupIdx = 1:size(obj.couplings,2)            
             dT      = obj.getScatteringCouplingDeriv(coupIdx, t, x, rapid, obj.rapid_aux, type, obj.type_aux);
-            accKern = 1/(2*pi) * dT.*transpose(obj.rapid_w .* theta);
+            accKern = 1/(2*pi) * dT.*transpose(obj.rapid_w .* fill);
             
             % if time deriv of coupling exist, compute f
             if ~isempty(obj.couplings{2,coupIdx}) 
                 f       = -obj.getMomentumCouplingDeriv(coupIdx, t, x, rapid, type) + accKern*dp_dr;
-                f_dr    = obj.applyDressing(f, theta, t);
+                f_dr    = obj.applyDressing(f, fill, t);
                 a_eff   = a_eff + obj.couplings{2,coupIdx}(t,x).*f_dr;
             end
             
             % if spacial deriv of coupling exist, compute Lambda
             if ~isempty(obj.couplings{3,coupIdx}) 
                 L       = -obj.getEnergyCouplingDeriv(coupIdx, t, x, rapid, type) + accKern*de_dr;
-                L_dr    = obj.applyDressing(L, theta, t);
+                L_dr    = obj.applyDressing(L, fill, t);
                 a_eff   = a_eff + obj.couplings{3,coupIdx}(t,x).*L_dr;
             end
         end
@@ -517,11 +531,11 @@ methods (Access = public)
     end
     
     
-    function [v_eff, a_eff, de_dr, dp_dr] = calcVelocitiesFast(obj, theta, t, D)        
+    function [v_eff, a_eff, de_dr, dp_dr] = calcVelocitiesFast(obj, fill, t, D)        
         % =================================================================
         % Purpose : Calculates effective velocity and acceleration of
         %           quasiparticles.
-        % Input :   theta -- filling function (fluidcell)
+        % Input :   fill  -- filling function (fluidcell)
         %           t     -- time (scalar)
         %           D     -- dressing operator (fluidcell)
         % Output:   v_eff -- Effective velocity (fluidcell)
@@ -550,7 +564,7 @@ methods (Access = public)
         % Calculate contribution for each coupling
         for coupIdx = 1:size(obj.couplings,2)            
             dT      = obj.getScatteringCouplingDeriv(coupIdx, t, x, rapid, obj.rapid_aux, type, obj.type_aux);
-            accKern = 1/(2*pi) * dT.*transpose(obj.rapid_w .* theta);
+            accKern = 1/(2*pi) * dT.*transpose(obj.rapid_w .* fill);
             
             % if time deriv of coupling exist, compute f
             if ~isempty(obj.couplings{2,coupIdx}) 
@@ -572,11 +586,11 @@ methods (Access = public)
     end
     
     
-    function Q_dr = applyDressing(obj, Q, theta, t)
+    function Q_dr = applyDressing(obj, Q, fill, t)
         % =================================================================
         % Purpose : Dresses quantity Q by solving system of linear eqs.
         % Input :   Q     -- Quantity to be dressed
-        %           theta -- filling function (fluidcell)
+        %           fill  -- filling function (fluidcell)
         %           t     -- time (scalar)
         % Output:   Q_dr  -- Dressed quantity (fluidcell)
         % =================================================================
@@ -594,7 +608,7 @@ methods (Access = public)
         
         I       = fluidcell.eye(obj.N, obj.Ntypes);
 
-        U       = I + kernel.*transpose(obj.rapid_w.*theta);
+        U       = I + kernel.*transpose(obj.rapid_w.*fill);
         
         % We now have the equation Q = U*Q_dr. Therefore we solve for Q_dr
         % using the '\' operation.
@@ -626,37 +640,37 @@ methods (Access = public)
     end
     
     
-    function Uinv = calcDressingOperator(obj, theta, t)
+    function Uinv = calcDressingOperator(obj, fill, t)
         % =================================================================
         % Purpose : Returns the dressing operator used to dress functions.
-        % Input :   theta -- filling function (fluidcell)
+        % Input :   fill  -- filling function (fluidcell)
         %           t     -- time (scalar)
         % Output:   Uinv  -- Dressing operator (fluidcell)
         % =================================================================
         
         kernel  = 1/(2*pi)*obj.getScatteringRapidDeriv(t, obj.x_grid, obj.rapid_grid, obj.rapid_aux, obj.type_grid, obj.type_aux);        
         I       = fluidcell.eye(obj.N, obj.Ntypes);
-        U       = I + kernel.*transpose(obj.rapid_w.*theta);
+        U       = I + kernel.*transpose(obj.rapid_w.*fill);
         Uinv    = inv(U);
     end
     
     
-    function theta = calcFillingFraction(obj, e_eff)
+    function fill = calcFillingFraction(obj, e_eff)
         % =================================================================
         % Purpose : Calculate filling function for given pseudo-energy.
         % Input :   e_eff -- pseudo-energy solution to Yang-Yang equation
-        % Output:   theta -- filling function
+        % Output:   fill  -- filling function
         % =================================================================
 
         switch obj.quasiSpecies
         case 'fermion'
-            theta = 1./( exp(e_eff) + 1);
+            fill = 1./( exp(e_eff) + 1);
         case 'boson'
-            theta = 1./( exp(e_eff) - 1);
+            fill = 1./( exp(e_eff) - 1);
         case 'classical'
-            theta = exp(-e_eff);
+            fill = exp(-e_eff);
         case 'radiative'
-            theta = 1./exp(e_eff);
+            fill = 1./exp(e_eff);
         otherwise
             error(['Quasi-particle species ' obj.quasiSpecies ' is not implemented! Check spelling and cases!'])
         end
@@ -732,25 +746,25 @@ methods (Access = public)
     end
     
     
-    function s = calcEntropyDensity(obj, theta, t_array)
+    function s = calcEntropyDensity(obj, fill, t_array)
        
-        [rhoP, rhoS] = obj.transform2rho(theta, t_array);
+        [rhoP, rhoS] = obj.transform2rho(fill, t_array);
         
         Nsteps = length(t_array);
         s       = zeros(obj.M, Nsteps);
         
         for i = 1:Nsteps
-            s(:,i) = - squeeze(double(sum(sum(obj.rapid_w.*rhoS{i}.*( theta{i}.*log(theta{i}) + (1-theta{i}).*log(1-theta{i}) ) ,1,'omitnan'),3,'omitnan')));
+            s(:,i) = - squeeze(double(sum(sum(obj.rapid_w.*rhoS{i}.*( fill{i}.*log(fill{i}) + (1-fill{i}).*log(1-fill{i}) ) ,1,'omitnan'),3,'omitnan')));
         end
 
     end
     
 
-    function D = calcDrudeWeight(obj, c_idx, theta, t)
+    function D = calcDrudeWeight(obj, c_idx, fill, t)
         % =================================================================
         % Purpose : Calculates Drude weight of specified charges.
         % Input :   c_idx   -- charge indices
-        %           theta   -- filling function (ifluidcell)
+        %           fill    -- filling function (ifluidcell)
         %           t       -- time (default value 0)
         % Output:   D       -- matrix of Drude weights
         % ================================================================= 
@@ -759,19 +773,19 @@ methods (Access = public)
             t = 0;
         end
 
-        D      = zeros(length(c_idx), length(c_idx), size(theta, 2));
+        D      = zeros(length(c_idx), length(c_idx), size(fill, 2));
     
         % calculate common part of Drude weight for all charges
-        rho     = obj.transform2rho(theta, t);
-        veff    = obj.calcEffectiveVelocities(theta, t);
-        f       = obj.getStatFactor(theta);
+        rho  = obj.transform2rho(fill, t);
+        veff    = obj.calcEffectiveVelocities(fill, t);
+        f       = obj.getStatFactor(fill);
         D_base  = obj.rapid_w.*rho.*f.*veff.^2;
 
         % calculate dressed single-particle eigenvalues
         hn_dr   = cell(1, length(c_idx));
         for n = 1:length(c_idx)
             hn      = obj.getOneParticleEV( c_idx(n), t, obj.x_grid, obj.rapid_grid);               
-            hn_dr{n}= obj.applyDressing(hn, theta, t);
+            hn_dr{n}= obj.applyDressing(hn, fill, t);
         end
 
         % for each combination of charges, calculate Drude weight
@@ -787,11 +801,11 @@ methods (Access = public)
     end
 
 
-    function L = calcOnsagerMatrix(obj, c_idx, theta, t)
+    function L = calcOnsagerMatrix(obj, c_idx, fill, t)
         % =================================================================
         % Purpose : Calculates Onsager matrix of specified charges.
         % Input :   c_idx   -- charge indices
-        %           theta   -- filling function (ifluidcell)
+        %           fill    -- filling function (ifluidcell)
         %           t       -- time (default value 0)
         % Output:   L       -- Onsager matrix
         % ================================================================= 
@@ -800,14 +814,14 @@ methods (Access = public)
             t = 0;
         end
 
-        L           = zeros(length(c_idx), length(c_idx), size(theta, 2));
+        L           = zeros(length(c_idx), length(c_idx), size(fill, 2));
     
         % calculate common part of Drude weight for all charges
-        [rho, rhoS] = obj.transform2rho(theta, t);
-        veff        = obj.calcEffectiveVelocities(theta, t);
-        f           = obj.getStatFactor(theta);
+        [rho, rhoS] = obj.transform2rho(fill, t);
+        veff        = obj.calcEffectiveVelocities(fill, t);
+        f           = obj.getStatFactor(fill);
         T           = 1/(2*pi)*obj.getScatteringRapidDeriv(t, obj.x_grid, obj.rapid_grid, obj.rapid_aux, obj.type_grid, obj.type_aux);
-        T_dr        = obj.applyDressing(T, theta, t);
+        T_dr        = obj.applyDressing(T, fill, t);
 
         L_base      = 0.5*obj.rapid_w.*permute(obj.rapid_w,[4 2 3 1]).*rho.*f.*rho.t().*f.t().*abs(veff - veff.t()).*T_dr.^2;
 
@@ -815,7 +829,7 @@ methods (Access = public)
         hn_dr       = cell(1, length(c_idx));
         for n = 1:length(c_idx)
             hn          = obj.getOneParticleEV( c_idx(n), t, obj.x_grid, obj.rapid_grid);               
-            hn_dr{n}    = obj.applyDressing(hn, theta, t);
+            hn_dr{n}    = obj.applyDressing(hn, fill, t);
         end
 
         % for each combination of charges, calculate Drude weight

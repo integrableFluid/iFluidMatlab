@@ -139,16 +139,16 @@ methods (Access = public)
 
             w       = ebare./T;
             e_eff   = obj.calcEffectiveEnergy(w, 0, obj.x_grid);
-            theta = obj.calcFillingFraction(e_eff);
+            fill = obj.calcFillingFraction(e_eff);
 
             obj.couplings{1,1} = mu_old;
             
             dp      = obj.getMomentumRapidDeriv(0, obj.x_grid, obj.rapid_grid, obj.type_grid);
 
             h0          = ones(obj.N, 1);            
-            h0_dr       = obj.applyDressing(h0, theta, 0);
+            h0_dr       = obj.applyDressing(h0, fill, 0);
                 
-            density    = 1/(2*pi) * squeeze(sum( obj.rapid_w .* sum( double(dp.*theta.*h0_dr) , 3) , 1));
+            density    = 1/(2*pi) * squeeze(sum( obj.rapid_w .* sum( double(dp.*fill.*h0_dr) , 3) , 1));
             
             Natoms_fit      = trapz(obj.x_grid, density);
         end % end nested function
@@ -248,7 +248,7 @@ methods (Access = public)
     end
     
     
-    function [mu0_fit, theta_fit] = fitDensity(obj, T, density_target, mu0_guess, silent)
+    function [mu0_fit, fill_fit] = fitDensity(obj, T, density_target, mu0_guess, silent)
         % =================================================================
         % Purpose : Assuming a homogeneous system, fit the chemical
         %           potential to reproduce the desired atomic density. 
@@ -256,7 +256,7 @@ methods (Access = public)
         %           density_target -- Density to fit to.
         %           mu0_guess -- Initial guess for central chemical pot.
         % Output:   mu0_fit -- Fitted central chemical potential.
-        %           theta_fit -- Fitted filling function.
+        %           fill_fit -- Fitted filling function.
         % =================================================================
         if nargin < 5
             silent = false;
@@ -272,9 +272,9 @@ methods (Access = public)
             mu0_fit     = fminsearch(fitfunc, mu0_guess);
         end
         
-        [~, theta_fit] = calcDens(obj, mu0_fit, T);
+        [~, fill_fit] = calcDens(obj, mu0_fit, T);
         
-        function [density, theta] = calcDens(obj, mu0, T)
+        function [density, fill] = calcDens(obj, mu0, T)
             mu_old      = obj.couplings{1,1};
             obj.couplings{1,1} = @(t,x) mu0;
             
@@ -286,53 +286,53 @@ methods (Access = public)
             
             w       = ebare./T;
             e_eff   = obj.calcEffectiveEnergy(w, 0, 0);
-            theta   = obj.calcFillingFraction(e_eff);
+            fill   = obj.calcFillingFraction(e_eff);
             
             dp      = obj.getMomentumRapidDeriv(0, 0, obj.rapid_grid, obj.type_grid);
             h0      = ones(obj.N, 1);            
-            h0_dr   = obj.applyDressing(h0, theta, 0);   
-            density = 1/(2*pi) * squeeze(sum( obj.rapid_w .* sum( double(dp.*theta.*h0_dr) , 3) , 1));
+            h0_dr   = obj.applyDressing(h0, fill, 0);   
+            density = 1/(2*pi) * squeeze(sum( obj.rapid_w .* sum( double(dp.*fill.*h0_dr) , 3) , 1));
             
             obj.couplings{1,1} = mu_old;
         end % end nested function
     end
     
 
-    function [x, theta_fit] = fitThermalState(obj, theta_noneq, t, x0, options)
+    function [x, fill_fit] = fitThermalState(obj, fill_noneq, t, x0, options)
         % =================================================================
         % Purpose : Given a non-equilibrium state, calculate a thermal
         %           state with the same energy.
-        % Input :   theta_noneq -- Filling fraction at time t.
+        % Input :   fill_noneq -- Filling fraction at time t.
         %           t           -- Time.
         %           x0          -- Initial guesses:
         %                           x0(1) = temperature
         %                           x0(2) = central chemical potential
         %           options     -- Fitting options.
         % Output:   x           -- Fitted temperature and mu0.
-        %           theta_fit   -- Fitted therml state.
+        %           fill_fit   -- Fitted therml state.
         % =================================================================
                 
         if nargin < 6 % No options supplied
             options = [];
         end
         
-        [N_target, E_target] = computeNE(theta_noneq, t);
+        [N_target, E_target] = computeNE(fill_noneq, t);
 
         xLast   = []; % Last place computeall was called
         Na_last = []; % Use for N_atoms at xLast
         Et_last = []; % Use for E_total at xLast
-        theta_last = []; 
+        fill_last = []; 
 
         fun     = @objfun; % The objective function, nested below
         cfun    = @constr; % The constraint function, nested below
 
         % Call fmincon
         [x,f,eflag,outpt] = fmincon(fun,x0,[],[],[],[],[],[],cfun,options);
-        [~,~,theta_fit] = computeall(x);
+        [~,~,fill_fit] = computeall(x);
 
         function f = objfun(x)
             if ~isequal(x,xLast) % Check if computation is necessary
-                [Na_last, Et_last, theta_last] = computeall(x);
+                [Na_last, Et_last, fill_last] = computeall(x);
                 xLast = x;
             end
             
@@ -342,7 +342,7 @@ methods (Access = public)
 
         function [c,ceq] = constr(x)
             if ~isequal(x,xLast) % Check if computation is necessary
-                [Na_last, Et_last, theta_last] = computeall(x);
+                [Na_last, Et_last, fill_last] = computeall(x);
                 xLast = x;
             end
             % Now compute constraint function
@@ -350,7 +350,7 @@ methods (Access = public)
             ceq = N_target - Na_last;
         end
         
-        function [N_atoms, E_total, theta] = computeall(x) 
+        function [N_atoms, E_total, fill] = computeall(x) 
             T           = x(1);
             mu0         = x(2);
             
@@ -367,25 +367,25 @@ methods (Access = public)
 
             w       = ebare./T;
             e_eff   = obj.calcEffectiveEnergy(w, t, obj.x_grid);
-            theta = obj.calcFillingFraction(e_eff);
+            fill = obj.calcFillingFraction(e_eff);
 
             obj.couplings{1,1} = mu_old;
             
-            [N_atoms, E_total] = computeNE(theta, t);
+            [N_atoms, E_total] = computeNE(fill, t);
         end
         
-        function [N_atoms, E_total] = computeNE(theta, t) 
+        function [N_atoms, E_total] = computeNE(fill, t) 
             % Calculate number of atoms and total energy
             dp      = obj.getMomentumRapidDeriv(t, obj.x_grid, obj.rapid_grid, obj.type_grid);
 
             h0      = obj.getOneParticleEV( 0, t, obj.x_grid, obj.rapid_grid);           
-            h0_dr   = obj.applyDressing(h0, theta, t);
+            h0_dr   = obj.applyDressing(h0, fill, t);
             
             h2      = obj.getOneParticleEV( 2, t, obj.x_grid, obj.rapid_grid);           
-            h2_dr   = obj.applyDressing(h2, theta, t);
+            h2_dr   = obj.applyDressing(h2, fill, t);
                 
-            ndens   = 1/(2*pi) * squeeze(sum( obj.rapid_w .* sum( double(dp.*theta.*h0_dr) , 3) , 1));
-            edens   = 1/(2*pi) * squeeze(sum( obj.rapid_w .* sum( double(dp.*theta.*h2_dr) , 3) , 1));
+            ndens   = 1/(2*pi) * squeeze(sum( obj.rapid_w .* sum( double(dp.*fill.*h0_dr) , 3) , 1));
+            edens   = 1/(2*pi) * squeeze(sum( obj.rapid_w .* sum( double(dp.*fill.*h2_dr) , 3) , 1));
             
             N_atoms = trapz(obj.x_grid, ndens);
             E_total = trapz(obj.x_grid, edens);
@@ -394,11 +394,11 @@ methods (Access = public)
     end
     
     
-    function [v_eff, a_eff, de_dr, dp_dr] = calcVelocitiesNormal(obj, theta, t, x, rapid, type)        
+    function [v_eff, a_eff, de_dr, dp_dr] = calcVelocitiesNormal(obj, fill, t, x, rapid, type)        
         % =================================================================
         % Purpose : Overloads superclass method, as acceleration in LL
         %           model can be computed in more efficient way.
-        % Input :   theta -- filling function (fluidtensor)
+        % Input :   fill  -- filling function (fluidtensor)
         %           t     -- time (scalar)
         %           x     -- x-coordinate (can be scalar or vector)
         %           rapid -- rapid-coordinate (can be scalar or vector)
@@ -407,8 +407,8 @@ methods (Access = public)
         %           a_eff -- Effective acceleration (fluidtensor)
         % =================================================================
         
-        de_dr   = obj.applyDressing(obj.getEnergyRapidDeriv(t, x, rapid, type), theta, t);
-        dp_dr   = obj.applyDressing(obj.getMomentumRapidDeriv(t, x, rapid, type), theta, t);
+        de_dr   = obj.applyDressing(obj.getEnergyRapidDeriv(t, x, rapid, type), fill, t);
+        dp_dr   = obj.applyDressing(obj.getMomentumRapidDeriv(t, x, rapid, type), fill, t);
         
         v_eff   = de_dr./dp_dr;
         
@@ -434,18 +434,18 @@ methods (Access = public)
             % Calculate derivative of scattering phase with respect to
             % interaction c           
             dT      = obj.getScatteringCouplingDeriv(2, t, x, rapid, obj.rapid_aux, type, obj.type_aux);
-            B       = 1/(2*pi) * dT.*transpose(obj.rapid_w .* theta);
+            B       = 1/(2*pi) * dT.*transpose(obj.rapid_w .* fill);
         end
         
         if ~isempty(obj.couplings{2,2}) % calc time deriv contribution
             f       = B*dp_dr;
-            f_dr    = obj.applyDressing(f, theta, t);
+            f_dr    = obj.applyDressing(f, fill, t);
             a_eff_c = a_eff_c + obj.couplings{2,2}(t,x).*f_dr;
         end
 
         if ~isempty(obj.couplings{3,2}) % calc space deriv contribution
             L       = B*de_dr;
-            L_dr    = obj.applyDressing(L, theta, t);
+            L_dr    = obj.applyDressing(L, fill, t);
             a_eff_c = a_eff_c + obj.couplings{3,2}(t,x).*L_dr;
         end
         
@@ -454,11 +454,11 @@ methods (Access = public)
     end
     
     
-    function [v_eff, a_eff, de_dr, dp_dr] = calcVelocitiesFast(obj, theta, t, D)        
+    function [v_eff, a_eff, de_dr, dp_dr] = calcVelocitiesFast(obj, fill, t, D)        
         % =================================================================
         % Purpose : Calculates effective velocity and acceleration of
         %           quasiparticles.
-        % Input :   theta -- filling function (fluidtensor)
+        % Input :   fill  -- filling function (fluidtensor)
         %           t     -- time (scalar)
         %           D     -- dressing operator (fluidtensor)
         % Output:   v_eff -- Effective velocity (fluidtensor)
@@ -499,7 +499,7 @@ methods (Access = public)
             % Calculate derivative of scattering phase with respect to
             % interaction c           
             dT      = obj.getScatteringCouplingDeriv(2, t, x, rapid, obj.rapid_aux, type, obj.type_aux);
-            B       = 1/(2*pi) * dT.*transpose(obj.rapid_w .* theta);
+            B       = 1/(2*pi) * dT.*transpose(obj.rapid_w .* fill);
         end
         
         if ~isempty(obj.couplings{2,2}) % calc time deriv contribution
@@ -519,12 +519,12 @@ methods (Access = public)
     end
     
     
-    function g_n = calcLocalCorrelator(obj, n, theta, t_array)
+    function g_n = calcLocalCorrelator(obj, n, fill, t_array)
         % =================================================================
         % Purpose : Calculates local n-body correlation function
         % Input :   n     -- order of correlation calculated
-        %           theta -- filling function (cell array of iFluidTensor)
-        %           t_array- array of times corresponding to theta
+        %           fill  -- filling function (cell array of iFluidTensor)
+        %           t_array- array of times corresponding to fill
         % Output:   g_n   -- Correlation func. for each time in t_array
         % =================================================================
         Nsteps = length(t_array);
@@ -532,21 +532,21 @@ methods (Access = public)
         
         for k = 1:Nsteps
             if Nsteps == 1
-                theta_k = theta;
+                fill_k = fill;
                 t       = t_array;
             else
-                theta_k = theta{k};
+                fill_k = fill{k};
                 t       = t_array(k);
             end
             
-            D       = obj.calcCharges(0, theta_k, t)'; % density
+            D       = obj.calcCharges(0, fill_k, t)'; % density
             prefac  = factorial(n)^2 * (obj.couplings{1,2}(t,obj.x_grid)).^n / 2^n ./ D.^n;
         
             % Find integers m_j to sum over
             m_seq   = findMseq(1, zeros(1,n), n, []);
         
             % Calc B functions
-            B = obj.calcB(n, theta_k, t);
+            B = obj.calcB(n, fill_k, t);
             
             g_temp = 0;
             for i = 1:length(m_seq) % for each set {m_j}_i
@@ -596,11 +596,11 @@ methods (Access = public)
     end
     
         
-    function B = calcB(obj, n, theta, t)
+    function B = calcB(obj, n, fill, t)
         % =================================================================
         % Purpose : Supporting function for calcLocalCorrelator()
         % Input :   n     -- order of correlation calculated
-        %           theta -- filling function (single iFluidTensor)
+        %           fill  -- filling function (single iFluidTensor)
         %           t     -- time 
         % Output:   B     -- cell array of all B_i funcs up to order 2*n-1
         % =================================================================
@@ -613,14 +613,14 @@ methods (Access = public)
         I       = fluidcell.eye(obj.N, obj.Ntypes);
 
         
-        X1      = I - kernel1.*transpose(obj.rapid_w.*theta);
+        X1      = I - kernel1.*transpose(obj.rapid_w.*fill);
         
         for i = 1:(2*n - 1)                
             if mod(i,2) == 0 % i even
-                X2      = -kernel1*(obj.rapid_w.*theta.*b{i-2+2}) + kernel2*(obj.rapid_w.*theta.*( 2*b{i-1+2} - b{i-3+2} ));
+                X2      = -kernel1*(obj.rapid_w.*fill.*b{i-2+2}) + kernel2*(obj.rapid_w.*fill.*( 2*b{i-1+2} - b{i-3+2} ));
                 b{i+2}  = X1\X2;
             else % i odd
-                X2      = kernel2*(obj.rapid_w.*theta.*b{i-1+2}) - kernel1*(obj.rapid_w.*theta.*b{i-2+2});
+                X2      = kernel2*(obj.rapid_w.*fill.*b{i-1+2}) - kernel1*(obj.rapid_w.*fill.*b{i-2+2});
                 
                 if i == 1 % delta function contribution for n = 0
                     X2 = X2 + 1;
@@ -632,7 +632,7 @@ methods (Access = public)
         
         B = cell(1, n);
         for i = 1:n
-            B{i} = 1/i*transpose(theta)*(obj.rapid_w.*b{2*i - 1 + 2 });
+            B{i} = 1/i*transpose(fill)*(obj.rapid_w.*b{2*i - 1 + 2 });
         end
     end
     
@@ -652,9 +652,9 @@ methods (Access = public)
     end
     
     
-    function F = calcBackflow(obj, theta, t, x)
+    function F = calcBackflow(obj, fill, t, x)
         phi     = -2*atan( (obj.rapid_grid - obj.rapid_aux)./obj.couplings{1,2}(t,x) );
-        F       = obj.applyDressing( phi, theta, t )/2/pi;
+        F       = obj.applyDressing( phi, fill, t )/2/pi;
     end
     
     

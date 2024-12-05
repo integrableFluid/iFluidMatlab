@@ -524,11 +524,11 @@ methods (Access = public)
     end
     
     
-    function Q_dr = applyDressing(obj, Q, theta, t)
+    function Q_dr = applyDressing(obj, Q, fill, t)
         % =================================================================
         % Purpose : Dresses quantity Q by solving system of linear eqs.
         % Input :   Q     -- Quantity to be dressed
-        %           theta -- filling function (fluidtensor)
+        %           fill -- filling function (fluidtensor)
         %           t     -- time (scalar)
         % Output:   Q_dr  -- Dressed quantity (fluidtensor)
         % =================================================================
@@ -545,7 +545,7 @@ methods (Access = public)
         eta     = obj.getTypeSigns();
         T       = 1/(2*pi)*obj.getScatteringRapidDeriv(0,0,0,0,0,0); % arguments dont matter
         I       = fluidcell.eye(obj.N, obj.Ntypes);
-        U       = I./eta - T.*transpose(obj.rapid_w.*theta);
+        U       = I./eta - T.*transpose(obj.rapid_w.*fill);
         
         % We now have the equation Q = U*Q_dr. Therefore we solve for Q_dr
         % using the '\' operation.
