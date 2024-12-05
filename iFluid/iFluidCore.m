@@ -135,9 +135,18 @@ methods (Access = public)
         end
         if size(couplings, 1) ~= 3
             obj.couplings = couplings(1,:);
+
+            % If no couplings derivatives are given, set flag to indicate
+            % that effective acceleration should not be calculated.
+            obj.homoEvol = true;
         else  
             obj.couplings = couplings;
+
+            % If no couplings derivatives are given, set flag to indicate
+            % that effective acceleration should not be calculated.
+            obj.homoEvol = all(all(cellfun(@isempty, couplings(2:end,:))));    
         end
+        
     end
     
     
