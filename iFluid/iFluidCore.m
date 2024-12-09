@@ -769,23 +769,25 @@ methods (Access = public)
     end
     
 
-    function D = calcDrudeWeight(obj, c_idx, fill, t)
+    function D = calcDrudeWeight(obj, c_idx, fill, t, x)
         % =================================================================
         % Purpose : Calculates Drude weight of specified charges.
         % Input :   c_idx   -- charge indices
         %           fill    -- filling function (ifluidcell)
         %           t       -- time (default value 0)
+        %           x       -- position (default value 0)
         % Output:   D       -- matrix of Drude weights
         % ================================================================= 
         
         if nargin < 4
             t = 0;
+            x = 0;
         end
 
         D      = zeros(length(c_idx), length(c_idx), size(fill, 2));
     
         % calculate common part of Drude weight for all charges
-        rho  = obj.transform2rho(fill, t);
+        rho     = obj.transform2rho(fill, t);
         veff    = obj.calcEffectiveVelocities(fill, t);
         f       = obj.getStatFactor(fill);
         D_base  = obj.rapid_w.*rho.*f.*veff.^2;
@@ -793,7 +795,7 @@ methods (Access = public)
         % calculate dressed single-particle eigenvalues
         hn_dr   = cell(1, length(c_idx));
         for n = 1:length(c_idx)
-            hn      = obj.getOneParticleEV( c_idx(n), t, obj.x_grid, obj.rapid_grid);               
+            hn      = obj.getOneParticleEV( c_idx(n), t, x, obj.rapid_grid);               
             hn_dr{n}= obj.applyDressing(hn, fill, t);
         end
 
@@ -810,17 +812,19 @@ methods (Access = public)
     end
 
 
-    function L = calcOnsagerMatrix(obj, c_idx, fill, t)
+    function L = calcOnsagerMatrix(obj, c_idx, fill, t, x)
         % =================================================================
         % Purpose : Calculates Onsager matrix of specified charges.
         % Input :   c_idx   -- charge indices
         %           fill    -- filling function (ifluidcell)
         %           t       -- time (default value 0)
+        %           x       -- position (default value 0)
         % Output:   L       -- Onsager matrix
         % ================================================================= 
         
         if nargin < 4
             t = 0;
+            x = 0;
         end
 
         L           = zeros(length(c_idx), length(c_idx), size(fill, 2));
@@ -829,7 +833,7 @@ methods (Access = public)
         [rho, rhoS] = obj.transform2rho(fill, t);
         veff        = obj.calcEffectiveVelocities(fill, t);
         f           = obj.getStatFactor(fill);
-        T           = 1/(2*pi)*obj.getScatteringRapidDeriv(t, obj.x_grid, obj.rapid_grid, obj.rapid_aux, obj.type_grid, obj.type_aux);
+        T           = 1/(2*pi)*obj.getScatteringRapidDeriv(t, x, obj.rapid_grid, obj.rapid_aux, obj.type_grid, obj.type_aux);
         T_dr        = obj.applyDressing(T, fill, t);
 
         L_base      = 0.5*obj.rapid_w.*permute(obj.rapid_w,[4 2 3 1]).*rho.*f.*rho.t().*f.t().*abs(veff - veff.t()).*T_dr.^2;
@@ -837,7 +841,7 @@ methods (Access = public)
         % calculate dressed single-particle eigenvalues
         hn_dr       = cell(1, length(c_idx));
         for n = 1:length(c_idx)
-            hn          = obj.getOneParticleEV( c_idx(n), t, obj.x_grid, obj.rapid_grid);               
+            hn          = obj.getOneParticleEV( c_idx(n), t, x, obj.rapid_grid);               
             hn_dr{n}    = obj.applyDressing(hn, fill, t);
         end
 

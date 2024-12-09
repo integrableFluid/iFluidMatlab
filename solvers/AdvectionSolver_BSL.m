@@ -21,7 +21,7 @@ classdef AdvectionSolver_BSL < handle
     % ** Step 3 ** Write constructor calling the super-constructor
     %
     %   function obj = mySolver(model, Options)
-    %       obj = obj@iFluidSolver(model, Options);
+    %       obj = obj@AdvectionSolver_BSL(model, Options);
     %   end
     %
     %
@@ -38,7 +38,7 @@ properties (Access = protected)
     rapid_w             = []; % weights for Gaussian quadrature
 
     model               = []; % iFluidCore object specifying the model
-    source              = []; % AdvectionSource object 
+    SourceObj           = []; % AdvectionSource object 
     settings            = []; % struct specifying settings
     
     
@@ -84,28 +84,50 @@ methods (Access = public)
         parser.KeepUnmatched = true;
 
         addParameter(parser, 'source', [], @(x) isa( x, 'AdvectionSource' ));
-        addParameter(parser, 'extrapolate', false, @(x) islogical(x));
+        addParameter(parser, 'extrapolate', false, @(x) islogical(x)); % legacy: pass as {'boundary_condition', 'open'} argument instead
         addParameter(parser, 'periodic_rapid', false, @(x) islogical(x));
-        addParameter(parser, 'periodic_BC', false, @(x) islogical(x));
-        addParameter(parser, 'reflective_BC', false, @(x) islogical(x));
+        addParameter(parser, 'periodic_BC', false, @(x) islogical(x)); % legacy: pass as 'boundary_condition' argument instead
+        addParameter(parser, 'reflective_BC', false, @(x) islogical(x)); % legacy: pass as 'boundary_condition' argument instead
         addParameter(parser, 'prop_characteristics', false, @(x) islogical(x));
         addParameter(parser, 'deriv_order', 1, @(x) isscalar(x) & floor(x) == x & x >=0);
         addParameter(parser, 'tol', 1e-4, @(x) x > 0);
         addParameter(parser, 'max_iter', 50, @(x) isscalar(x) & floor(x) == x & x >=0);
         addParameter(parser, 'storeNthStep', 1, @(x) isscalar(x) & floor(x) == x & x >=0);
-        
+
+        % parse spatial boundary conditions
+        defaultBC = 'none';
+        validBC = {'none','periodic','reflective','open'};
+        addParameter(parser, 'boundary_conditions', defaultBC, @(x) any(validatestring(x,validBC)));
+
 
         parse(parser,varargin{:});
         
         % set settings equal to parser results
-        obj.source      = parser.Results.source;
+        SourceObj       = parser.Results.source;
         obj.settings    = rmfield(parser.Results, 'source');
         obj.settings    = parser.Results;
+
+        % handle legacy boundary conditions
+        if obj.settings.extrapolate
+            obj.settings.boundary_conditions = 'open';
+        elseif obj.settings.periodic_BC
+            obj.settings.boundary_conditions = 'periodic';
+        elseif obj.settings.reflective_BC
+            obj.settings.boundary_conditions = 'reflective';
+        end
+
+        obj.settings    = rmfield(obj.settings, 'extrapolate');
+        obj.settings    = rmfield(obj.settings, 'periodic_BC');
+        obj.settings    = rmfield(obj.settings, 'reflective_BC');
+
         
-        
-        if ~isempty(obj.source)
-            % copy settings from solver to source term
-            obj.source.copySettings(obj.settings);
+        % handle source term (if exists)
+        if ~isempty(SourceObj )
+            % Inject the Solver into the Source
+            SourceObj.attachSolver(obj); 
+
+            % Store reference to Source
+            obj.SourceObj = SourceObj;
             
             % cannot propagate characteristics when there is a source term
             obj.settings.prop_characteristics = false;
@@ -115,6 +137,19 @@ methods (Access = public)
     
     function settings = getSettings(obj)
         settings = obj.settings;
+    end
+
+    function setBoundaryConditions(obj, boundary_conditions)
+        validBC = {'none','periodic','reflective','open'};
+
+        isValid = ismember(lower(boundary_conditions), validBC); % Case-insensitive check
+
+        if isValid
+            obj.settings.boundary_conditions = lower(boundary_conditions);
+        else
+            error("The value of 'boundary_conditions' is invalid. Expected input to match one of these values: %s", ...
+              strjoin(validBC, ', '));
+        end
     end
 
     
@@ -136,7 +171,7 @@ methods (Access = public)
         
         [x_d, r_d, v, a] = obj.calculateDeparturePoints(fill, t, dt);
         
-        if isempty(obj.source)
+        if isempty(obj.SourceObj)
             % no source term --> pure advection
 
             fill_next = obj.interpPhaseSpace(fill, r_d, x_d);
@@ -155,7 +190,7 @@ methods (Access = public)
         else
             % source term --> non-linear advection step
             % u_next and w_next are auxiliary variables
-            [fill_next, u_next, w_next] = obj.source.step(fill, x_d, r_d, u, w, t, dt);
+            [fill_next, u_next, w_next] = obj.SourceObj.step(fill, x_d, r_d, u, w, t, dt);
             obj.storeVelocityFields(fill_next, x_d, r_d, v, a);
         end
             
@@ -165,7 +200,7 @@ methods (Access = public)
         % =================================================================
         % Purpose : Propagates the filling function according to the GHD
         %           Euler-scale equation.
-        % Input :   fill_init -- Initial filling function (iFluidTensor).
+        % Input :   fill_init -- Initial filling function (fluidcell).
         %           t_array    -- Time steps for propagation
         % Output:   fill_t    -- Cell array of filling function,
         %                         with each entry corresponding to t_array.
@@ -181,7 +216,7 @@ methods (Access = public)
         % =================================================================
         % Purpose : Propagates the filling function according to the GHD
         %           Euler-scale equation.
-        % Input :   fill_init -- Initial filling function (iFluidTensor).
+        % Input :   fill_init -- Initial filling function (fluidcell).
         %           t_array    -- Time steps for propagation
         % Output:   fill_t    -- Cell array of filling function,
         %                         with each entry corresponding to t_array.
@@ -205,8 +240,8 @@ methods (Access = public)
         % any additional quantities needed for the step-function.
         [fill, u, w]   = obj.initialize(fill_init, u_init, w_init, t_array);
         
-        if ~isempty(obj.source)
-            [fill, u, w] = obj.source.initialize(fill_init, u_init, w_init, t_array);
+        if ~isempty(obj.SourceObj)
+            [fill, u, w] = obj.SourceObj.initialize(fill_init, u_init, w_init, t_array);
         end
         
         fill_t{1}      = fill;
@@ -243,105 +278,101 @@ methods (Access = public)
     end
     
 
-    function tensor_int = interpPhaseSpace(obj, tensor_grid, rapid_int, x_int, varargin)
-        % =================================================================
-        % Purpose : Interpolates an iFluidTensor defined on the grids 
-        %           stored in the object to new coordinates.
-        %           This function exists because MATLAB has different
-        %           syntax between interp1 and interp2in terms of 
-        %           extrapolation...
-        % Input :   tensor_grid -- iFluidTensor defined on rapid_grid,
-        %                          x_grid, and type_grid.
-        %           rapid_int   -- Rapidity values to interpolate to
-        %                           (should be iFluidTensor sized
-        %                            [N, M, Ntypes] )
-        %           x_int       -- Spatial values to interpolate to
-        %                           (should be iFluidTensor sized
-        %                            [N, M, Ntypes] )
-        %           extrapFlag  -- if true, enable extrapolations
-        %                          if false, all extrap. values are zero
-        % Output:   tensor_int -- iFluidTensor interpolated to input grids.
-        % =================================================================
+    function Vq = interpPhaseSpace(obj, V, Rq, Xq, varargin)
+        % =====================================================================
+        % Purpose : Interpolates the values of a fluidcell, defined on the
+        %           stored rapidity and positional grids, to query points.
+        %           Handles boundary conditions.
+        % Input :   R, X    -- Sample rapidity (R) and position (X) grid points
+        %           V       -- Sample values to interpolate (must be fluidcell 
+        %                       sized [N, M, NT] )
+        %           Rq, Xq  -- Query points to interpolate to (must be 
+        %                       fluidcell sized [N, M, NT] )
+        %           varargin-- Contains optional flags for the following
+        %                       - employ extrapolation
+        %                       - enforce boundary conditions
+        % Output:   Vq      -- Interpolated values (returned as fluidcell)
+        % =====================================================================
         
-        % Handle varargin 
-        defaultValues = { obj.settings.extrapolate, ...
-                          obj.settings.periodic_BC | obj.settings.reflective_BC }; 
+        % Define default values for the optional inputs
+        defaultValues = [false, true];
+    
+        % Set the values of optional inputs based on varargin
+        if nargin >= 5
+            use_extrap = varargin{1};
+        else
+            use_extrap = defaultValues(1);
+        end
+    
+        if nargin >= 6
+            enforce_BC = varargin{2};
+        else
+            enforce_BC = defaultValues(2);
+        end
 
-        idx = ~cellfun(@isempty,varargin);  % find which parameters have changed
-        defaultValues(idx)  = varargin(idx); % replace the changed ones
-        [extrap, enforce_BC]= defaultValues{:};  
 
-
-        % interpolation method
+        % Set interpolation method
         method = 'spline';
         if GPU_mode_on()
             method = 'cubic';
         end
-
-
-        % Cast to matrix form
-        x_int       = double(x_int);
-        rapid_int   = double(rapid_int);
-        mat_grid    = double(tensor_grid); % should be (N,M,Nt)
         
         % Need spacial dimension as first index in order to use (:) linearization
-        x_int       = permute(x_int, [2 1 3]); % (M,N,Nt)
-        rapid_int   = permute(rapid_int, [2 1 3]);
-        
+        Xq      = permute(double(Xq), [2 1 3]);
+        Rq      = permute(double(Rq), [2 1 3]);    
+        V       = permute(double(V), [2 1 3]);
+        Vq      = zeros(obj.M, obj.N, obj.Ntypes);
+
+
         % Enforce periodic boundary conditions of rapidity
         if obj.settings.periodic_rapid 
-            rapid_int   = mod(rapid_int + obj.rapid_grid(1), obj.rapid_grid(end)-obj.rapid_grid(1)) + obj.rapid_grid(1);
+            Rq      = mod(Rq + obj.rapid_grid(1), obj.rapid_grid(end)-obj.rapid_grid(1)) + obj.rapid_grid(1);
         end
 
         % If required, enforce boundary conditions of position
-        if enforce_BC && obj.settings.periodic_BC 
-            x_int       = mod(x_int + obj.x_grid(1), obj.x_grid(end)-obj.x_grid(1)) + obj.x_grid(1);
+        if enforce_BC && strcmpi(obj.settings.boundary_conditions, 'periodic')
+            Xq      = mod(Xq + obj.x_grid(1), obj.x_grid(end)-obj.x_grid(1)) + obj.x_grid(1);
+
+        elseif enforce_BC && strcmpi(obj.settings.boundary_conditions, 'reflective')
+            filter_R= (Xq - obj.x_grid(end)) > 0;               % right boundary
+            filter_L= (Xq - obj.x_grid(1)) < 0;                 % left boundary
+            filter  = filter_R | filter_L;
+
+            Xq      = (~filter) .* Xq + ...                     % non-reflected
+                       filter_R.*(2*obj.x_grid(end) - Xq) + ... % reflected right
+                       filter_L.*(2*obj.x_grid(1) - Xq);        % reflected left
+
+            Rq      = (~filter) .* Rq + ...                     % non-reflected
+                       filter_R .* (-Rq) + ...                  % reflected right
+                       filter_L .* (-Rq);                       % reflected right
+
+        elseif enforce_BC && strcmpi(obj.settings.boundary_conditions, 'open')
+            use_extrap = true;
         end
-        if enforce_BC && obj.settings.reflective_BC     
-            filter_R        = (x_int - obj.x_grid(end)) > 0; % hit right wall
-            filter_L        = (x_int - obj.x_grid(1)) < 0; % hit left wall
-            filter          = filter_R | filter_L;
-
-            x_int           = (~filter) .* x_int + ...                    % non-reflected
-                               filter_R.*(2*obj.x_grid(end) - x_int) + ... % reflected right
-                               filter_L.*(2*obj.x_grid(1) - x_int);      % reflected left
-
-            rapid_int        = (~filter) .* rapid_int + ...             % non-reflected
-                                filter_R .* (-rapid_int) + ...         % reflected right
-                                filter_L .* (-rapid_int);              % reflected right
-        end
-
         
-        % Get matrix representation of fluidcell and permute spacial index
-        % to first.
-        x_g         = permute(obj.x_grid, [2 1 3]); % (M,N,Nt)
-        rapid_g     = permute(obj.rapid_grid, [2 1 3]);
-        
-        mat_grid    = permute(mat_grid, [2 1 3]);
-        mat_int     = zeros(obj.M, obj.N, obj.Ntypes);
-        
-        for i = 1:obj.Ntypes
-            rapid_i = rapid_int(:,:,i);
-            x_i     = x_int(:,:,i);
-            mat_g   = mat_grid(:,:,i);   
+        for i = 1:obj.Ntypes % interpolate for each particle type index
+            Rq_i    = Rq(:,:,i);
+            Xq_i    = Xq(:,:,i);
+            V_i     = V(:,:,i);   
             
-            if extrap
+            if use_extrap
                 % Extrapolate beyond the defined grids
-                mat_tmp = interp2( rapid_g, x_g, mat_g, rapid_i(:), x_i(:), method);
+                V_tmp   = interp2( obj.rapid_grid(:)', obj.x_grid(:), V_i, Rq_i(:), Xq_i(:), method);
             else
                 % Set all extrapolation values to zero!
-                mat_tmp = interp2( rapid_g, x_g, mat_g, rapid_i(:), x_i(:), method, 0);
+                V_tmp   = interp2( obj.rapid_grid(:)', obj.x_grid(:), V_i, Rq_i(:), Xq_i(:), method, 0);
             end
            
-            mat_tmp(isnan(mat_tmp)) = 0;
-            mat_tmp = reshape(mat_tmp, obj.M, obj.N);
-            mat_int(:,:,i) = mat_tmp;
+            V_tmp(isnan(V_tmp)) = 0;
+            V_tmp       = reshape(V_tmp, obj.M, obj.N);
+            Vq(:,:,i)   = V_tmp;
         end
         
-        % Reshape back to original indices
-        mat_int = permute(mat_int, [2 1 3] );
-        tensor_int = fluidcell(mat_int);
+        % Permute back to normal fluidcell index structure
+        Vq      = permute(Vq, [2 1 3] );
+        Vq      = fluidcell(Vq);
     end
+
         
     
     function V = calcVelocityDerivatives(obj, order, fill, t)

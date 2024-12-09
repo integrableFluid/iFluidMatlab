@@ -330,20 +330,22 @@ methods (Access = public)
     
 
 
-    function D_SI = calcDrudeWeight(obj, c_idx, fill, t)
+    function D_SI = calcDrudeWeight(obj, c_idx, fill, t, x)
         
         if nargin < 4
             t = 0;
+            x = 0;
         end
         
         % Convert SI --> TBA
         t = obj.convert2TBA(t, 'time');
+        x = obj.convert2TBA(x, 'length');
         
         % Run LL function
-        DW_TBA = calcDrudeWeight@LiebLinigerModel(obj, c_idx, fill, t);
+        D_TBA = calcDrudeWeight@LiebLinigerModel(obj, c_idx, fill, t, x);
         
         % Convert TBA --> SI
-        D_SI = obj.convert2TBA(DW_TBA, 'length'); % convert 'per length'
+        D_SI = obj.convert2TBA(D_TBA, 'length'); % convert 'per length'
 
         for i = 1:length(c_idx)
         for j = 1:length(c_idx)

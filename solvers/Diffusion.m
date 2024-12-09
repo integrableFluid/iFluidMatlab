@@ -2,8 +2,6 @@ classdef Diffusion < AdvectionSource
     
     
 properties (Access = protected)
-
-    amp_fact; % factor for increasing the amplitude of diffusion
     
     
 end % end protected properties
@@ -14,15 +12,8 @@ methods (Access = public)
     % Superclass constructor
     function obj = Diffusion(model, varargin)        
         obj = obj@AdvectionSource(model, varargin{:});
-             
-        % Parse inputs from varargin
-        parser = inputParser;
-        parser.KeepUnmatched = true;
+        
 
-        addParameter(parser, 'amp_fact', 1, @(x) x >= 0);
-
-        parse(parser,varargin{:});
-        obj.amp_fact = parser.Results.amp_fact;
     end
     
 
@@ -53,9 +44,9 @@ methods (Access = public)
         
         % Calculate diffusion operator      
         R           = (I - T.*(fill.*obj.rapid_w))./rhoS;   
-        fill_x     = obj.gradient_space(obj.x_grid, fill);
+        fill_x      = obj.gradient_space(obj.x_grid, fill);
         temp        = double( R\(DT*fill_x) );   
-        D           = obj.amp_fact * 0.5*R*obj.gradient_space(obj.x_grid, temp);
+        D           = 0.5*R*obj.gradient_space(obj.x_grid, temp);
         
     end
 
@@ -76,7 +67,7 @@ methods (Access = public)
         f_x     = f_x(:,2:end-1);
 
         % ensure periodicity
-        if obj.settings.periodic_BC
+        if strcmpi(obj.SolverObj.getSettings.boundary_conditions, 'periodic')
             f_edge      = 0.5*(f_x(:,1,:) + f_x(:,end,:));
             
             f_x(:,1,:)  = 2*f_edge;
