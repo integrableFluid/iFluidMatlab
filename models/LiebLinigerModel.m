@@ -150,7 +150,11 @@ methods (Access = public)
                 
             density    = 1/(2*pi) * squeeze(sum( obj.rapid_w .* sum( double(dp.*fill.*h0_dr) , 3) , 1));
             
-            Natoms_fit      = trapz(obj.x_grid, density);
+            if length(density) == 1
+                Natoms_fit = density*(obj.x_grid(end) - obj.x_grid(1));
+            else
+                Natoms_fit      = trapz(obj.x_grid, density);
+            end
         end % end nested function
     end
     

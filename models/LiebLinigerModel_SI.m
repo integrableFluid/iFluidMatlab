@@ -59,7 +59,7 @@ methods (Access = public)
             case 'energy'
                 quantity_tba = quantity_si/obj.Eg_si;
             case 'rapidity'
-                quantity_tba = quantity_si*obj.Lg_si*obj.RS;
+                quantity_tba = quantity_si*obj.Lg_si;
             case 'momentum'
                 quantity_tba = quantity_si/obj.P_si;
             case 'time'
@@ -108,7 +108,7 @@ methods (Access = public)
             case 'momentum'
                 quantity_si = quantity_tba*obj.P_si;
             case 'rapidity'
-                quantity_si = quantity_tba/obj.Lg_si/obj.RS;
+                quantity_si = quantity_tba/obj.Lg_si;
             case 'time'
                 quantity_si = quantity_tba*obj.t_si;
             case 'length'
