@@ -1,35 +1,56 @@
 clear all; 
 
-% In this example the dynamics of a quantum Newtons cradle are calculated.
-% The cradle consist of two clouds of 1D Bose gases, which oscillate in a
-% slightly anharmonic confinemt. 
-% The evolution is calculated for both Euler-scale and diffusive scale GHD.
+% Example: Dynamics in the Quantum Newton's Cradle Setup
+%
+% This script explores the dynamics of a system inspired by the quantum 
+% Newton's cradle experiment. The initial state is prepared as a thermal 
+% state in a tilted double-well potential, followed by a quench to a slightly 
+% anharmonic potential.
+%
+% Key features demonstrated in this example:
+% 1. Initial state preparation: Calculation of the quasiparticle distribution 
+%    for a thermal state in a tilted double-well potential.
+% 2. Dynamics simulation:
+%    - Euler-scale GHD: Simulates the integrable dynamics.
+%    - Quasi-1D GHD: Includes a collision integral to account for transverse 
+%      excitations that break integrability.
+% 3. Visualization: Comparison of the resulting dynamics for:
+%    - Filling functions.
+%    - Atomic density profiles.
+%    - Populations of transverse states.
+%
+% This example provides insight into how anharmonicity and transverse 
+% excitations affect the dynamics of a near-integrable system, bridging the 
+% gap between idealized integrable models and real-world experiments.
+
+
+
+clear all; 
 
 % Add paths to iFluid directories
-addpath(['..' filesep 'models' filesep])
-addpath(['..' filesep 'solvers' filesep])
-addpath(['..' filesep 'iFluid' filesep])
-addpath(['..' filesep 'utils' filesep])
+iFluid_root_path = ['..' filesep];
+add_iFluid_path(iFluid_root_path)
+
 
 %% Define simulation parameters
 
 % physical parameters
 c           = 1;                                    % coupling strength
-mu0         = 1;                                    % central chemical potential
+mu0         = -3;                                    % central chemical potential
 T           = 3;                                    % temperature
 
-V_DW        = @(t,x) 0.15*x.^4 - 2*x.^2 + 0.1*x.^3; % double-well potential
+V_DW        = @(t,x) 0.15*x.^4 - 2*x.^2 + 0.05*x.^3; % double-well potential
 dVdz_AHO    = @(t,x) 4*x.*exp(-2*x.^2/(12)^2);      % gradient of (an)harmonic oscillator potential
 
 
 % grid parameters
-N           = 150;                                  % number of rapidity gridpoints              
-M           = 150;                                  % number of position gridpoints
+N           = 100;                                  % number of rapidity gridpoints              
+M           = 100;                                  % number of position gridpoints
 Nsteps      = 500;                                  % number of time steps
 
 rmax        = 8;                                    % max rapidity
 zmax        = 6;                                    % max position
-tmax        = 5;                                    % evolution duration
+tmax        = 10;                                   % evolution duration
 
 r_grid      = linspace(-rmax, rmax, N);             % rapidity grid
 dr          = r_grid(2) - r_grid(1);                % quadrature weights
@@ -94,6 +115,8 @@ xlabel('position')
 ylabel('density')
 
 
+sgtitle('Initial thermal state in double-well potential')
+
 
 %% Solve Euler-scale dynamics 
 
@@ -111,21 +134,24 @@ toc
 n_t_eul     = LL_model.calcCharges(0, fill_t_eul, t_array);
 
 
-%% Solve diffusive dynamics 
+%% Solve dynamics with quasi-1D collision integral
+
+% Set length of transverse harmonic oscillator
+lperp       = 0.35; 
 
 % Setup dissipation kernel, here diffusion, with the SETTLS scheme 
-source      = Diffusion(LL_model, 'propagation_scheme', 'SETTLS');
+source      = Quasi1D_CollisionIntegral(LL_model, lperp, 'propagation_scheme', 'endpoint');
 
 % Setup solver with explicit Runge-Kutta 4th order scheme as base 
-solver_diff = AdvectionSolver_BSL_RK4(LL_model, 'implicit', false, 'source', source);
+solver_q1D  = AdvectionSolver_BSL_RK4(LL_model, 'implicit', false, 'source', source);
 
 % Simulate dynamics by solving GHD disspative equation
 tic
-fill_t_diff = solver_diff.propagateTheta( fill_therm, t_array );
+[fill_t_q1D, trans_frac] = solver_q1D.propagateTheta( fill_therm, t_array );
 toc
 
 % Calculate atomic density
-n_t_diff    = LL_model.calcCharges(0, fill_t_diff, t_array);
+n_t_q1D     = LL_model.calcCharges(0, fill_t_q1D, t_array);
 
 
 %% Plot the results 
@@ -144,18 +170,23 @@ for i = plot_idx
     xlabel('position')
     ylabel('rapidity')
     colormap(bluewhitered)
+    yline(sqrt(2)/lperp, 'k--')
+    yline(-sqrt(2)/lperp, 'k--')
 end
 
 for i = plot_idx
     nexttile
-    imagesc(z_grid, r_grid, double(fill_t_diff{i}))
+    imagesc(z_grid, r_grid, double(fill_t_q1D{i}))
     set(gca,'ydir', 'normal')
     xlabel('position')
     ylabel('rapidity')
     colormap(bluewhitered)
+    yline(sqrt(2)/lperp, 'k--')
+    yline(-sqrt(2)/lperp, 'k--')
 end
 
-sgtitle('evolution of filling function')
+sgtitle('Evolution of filling function')
+
 
 % plot density carperts
 figure
@@ -168,9 +199,21 @@ ylabel('position')
 colorbar
 
 nexttile
-imagesc(t_array,z_grid, n_t_diff)
+imagesc(t_array,z_grid, n_t_q1D)
 xlabel('time')
 ylabel('position')
 colorbar
 
-sgtitle('evolution of atomic density')
+sgtitle('Evolution of atomic density')
+
+
+% plot fraction of population in transverse excited states
+trans_frac = cell2mat(trans_frac(:));
+
+figure
+box on
+hold on
+plot(t_array, test(:,1))
+plot(t_array, test(:,2))
+xlabel('t')
+ylabel('fractional transverse population')

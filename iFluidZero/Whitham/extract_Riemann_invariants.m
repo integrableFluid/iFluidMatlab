@@ -9,6 +9,10 @@ function [R, z_DSW] = extract_Riemann_invariants(contours, M_DSW)
     %           z_DSW   -- positions correpoding to each point in Riemann 
     % =====================================================================
 
+    if ~iscell(contours)
+        contours = {contours};
+    end
+
     N1 = size(contours, 1); 
     N2 = size(contours, 2); 
 
@@ -26,29 +30,33 @@ function [R, z_DSW] = extract_Riemann_invariants(contours, M_DSW)
 
     for i = 1:N2
 
-        % find index of lower and upper DSW edge and lower contour edge
-        i_low = find( contours{1,i}(:,2) < 0, 1); 
-        i_up = find( diff(contours{1,i}(1:i_low-2,1))<=0 ,1);
-        i_dw = i_up + find( diff(contours{1,i}(i_up:end,1))>=0 ,1) -1; 
+        % Find first and last index of lower contour edge (is assumed to be
+        % at negative rapidity) 
+        i_low1  = find( contours{1,i}(:,2) < 0, 1, 'first'); 
+        i_low2  = find( contours{1,i}(:,2) < 0, 1, 'last'); 
+
+        % Find index of harmonic and solitonic edge of DSW 
+        i_he = find( diff(contours{1,i}(1:i_low1-2,1))<=0 ,1);
+        i_se = i_he + find( diff(contours{1,i}(i_he:end,1))>=0 ,1) -1; 
         
-        i_DSW(:,i) = [i_dw; i_up; i_low];
+        i_DSW(:,i) = [i_se; i_he; i_low1];
         
-        if isempty(i_up)
+        if isempty(i_he)
             continue
         end
 
-        z_dw = contours{1,i}(i_dw,1);
-        z_up = contours{1,i}(i_up,1);
+        z_dw = contours{1,i}(i_se,1);
+        z_up = contours{1,i}(i_he,1);
 
         % create spatial grid of DSW region
         z_DSW(:,i) = linspace(z_dw, z_up, M_DSW);
 
         % interpolate to positinal grid
         for j = 1:N1
-            r1(:,i,j) = interp1(contours{j,i}(i_low:end,1), contours{j,i}(i_low:end,2), z_DSW(:,i), 'makima')';
-            r2(:,i,j) = interp1(contours{j,i}(i_dw:i_low-1,1), contours{j,i}(i_dw:i_low-1,2), z_DSW(:,i), 'makima')';
-            r3(:,i,j) = interp1(contours{j,i}(i_up:i_dw,1), contours{j,i}(i_up:i_dw,2), z_DSW(:,i), 'makima')';
-            r4(:,i,j) = interp1(contours{j,i}(1:i_up,1), contours{j,i}(1:i_up,2), z_DSW(:,i), 'makima')';
+            r1(:,i,j) = interp1(contours{j,i}(i_low1:i_low2,1), contours{j,i}(i_low1:i_low2,2), z_DSW(:,i), 'makima')';
+            r2(:,i,j) = interp1(contours{j,i}(i_se:i_low1-1,1), contours{j,i}(i_se:i_low1-1,2), z_DSW(:,i), 'makima')';
+            r3(:,i,j) = interp1(contours{j,i}(i_he:i_se,1), contours{j,i}(i_he:i_se,2), z_DSW(:,i), 'makima')';
+            r4(:,i,j) = interp1(contours{j,i}(1:i_he,1), contours{j,i}(1:i_he,2), z_DSW(:,i), 'makima')';
         end
     end 
 

@@ -446,6 +446,11 @@ methods (Access = public)
         
         e_eff   = obj.calcEffectiveEnergy(w, 0, obj.x_grid);
         fill    = obj.calcFillingFraction(e_eff);
+
+        if size(fill, 2) == 1 && obj.M > 1
+            fill = repmat(double(fill), 1, obj.M, 1);
+            fill = fluidcell(fill);
+        end
         
         if nargin == 3
             % Return to old couplings

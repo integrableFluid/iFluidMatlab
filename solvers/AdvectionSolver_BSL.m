@@ -248,8 +248,17 @@ methods (Access = public)
         u_t{1}          = u;
         w_t{1}          = w;
         
+        % Display solver settings
+        if isempty(obj.SourceObj)
+            source_str = 'none';
+        else
+            source_str = class(obj.SourceObj);
+        end
+        
+        fprintf("Initializing BSL propagation with boundary conditions: '%s' and source: '%s'\n", ...
+                obj.settings.boundary_conditions, source_str);
          
-        % initialize progress bar
+        % Initialize progress bar
         cpb = ConsoleProgressBar();                 % create instance
         initialize_progbar;                         % initialize progress bar with standard parameters
         fprintf('Time evolution progress:');

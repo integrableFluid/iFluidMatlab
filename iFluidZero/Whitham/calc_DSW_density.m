@@ -12,7 +12,7 @@ function [n_DSW, u_DSW] = calc_DSW_density(R, z_DSW, t, c)
 
     % constants
     hbar = 1;
-    m = 0.5;
+    m = 0.515;
     dens_fact = m/sqrt(c)/hbar; % r*fact --> density
 
     Xi = z_DSW - 0.5*(R{1}+R{2}+R{3}+R{4}).*reshape(t, 1, []); % units of length
